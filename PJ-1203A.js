@@ -117,16 +117,18 @@ function PJ1203A_getPrivateState(meta) {
 
 function PJ1203A_providePrivateState(meta) {
     if ( ! ('_priv' in meta.device) ) {
-       meta.device._priv = {
-         'energy_flow_a': null, 
-         'energy_flow_b': null, 
-         'power_a': null, 
-         'power_b': null,
-         'current_a': null,
-         'current_b': null,
-         'power_factor_a': null,
-         'power_factor_b': null,
-         'last_seq': -99999
+        meta.device._priv = {
+            'energy_flow_a': null, 
+            'energy_flow_b': null, 
+            'power_a': null, 
+            'power_b': null,
+            'current_a': null,
+            'current_b': null,
+            'power_factor_a': null,
+            'power_factor_b': null,
+            'last_seq': -99999,
+            'counter_a':0,  
+            'counter_b':0,  
          } ;
     }      
     return meta.device._priv ;
@@ -140,7 +142,7 @@ const PJ1203A_SEQ_INCREMENT = 256 ;
 const PJ1203A_options = {
     missing_message_detection: () => exposes.binary('missing_message_detection', ea.SET, true, false )
         .withDescription(
-            'Disable all pending data when missing or reordered messages are detected. Default is false'),
+            'Discard all pending data when missing or reordered messages are detected. Default is false'),
     publishing_mode: () => exposes.enum('publishing_mode', ea.SET, ['immediate','at_power_factor','at_energy_flow'] )
         .withDescription(
             'Define when energy_flow_x, power_x, current_x and power_factor_x are published.'+
@@ -152,10 +154,10 @@ const PJ1203A_options = {
         ),
     missing_data_behavior: () => exposes.enum('missing_data_behavior', ea.SET, ['keep_missing','keep_all','nullify_missing', 'nullify_all' ] )
         .withDescription(
-            'Define the behavior when some of energy_flow_x, power_x, current_x and power_factor_x are missing. '+
-                'This is only relevant when if not in \'immediate\' publishing mode. '+
+            'Define the behavior when some of energy_flow_x, power_x, current_x and power_factor_x are missing.'+
+                ' That has no effect in \'immediate\' publishing mode. '+
                 ' With \'keep_missing\' the missing attributes keep they old value. '+
-                ' With \'keep_all\' (the default) all attributes keep they old value. '+
+                ' With \'keep_all\' (the default) no attribute is published so they all keep they old value. '+
                 ' With \'nullify_missing\' the missing attributes are set to null. '+
                 ' With \'nullify_all\' all attributes are set to null'),
 };
@@ -170,6 +172,12 @@ function PJ1203A_get_publishing_mode(options) {
 
 function PJ1203A_get_missing_data_behavior(options) {
     return options?.missing_data_behavior || 'keep_all' ;
+}
+
+// Change the counter_a or counter_b attribute 
+function PJ1203A_next_seq(result,priv,x) {
+    let counter_x = 'counter_'+x ;
+    result[counter_x] = priv[counter_x] = ( priv[counter_x] + 1 ) & 0xFFFF ;
 }
 
 function PJ1203A_flush_all(result,x,priv,options,clear) {
@@ -189,6 +197,7 @@ function PJ1203A_flush_all(result,x,priv,options,clear) {
         result['power_'+x]        = power;
         result['current_'+x]      = current;
         result['power_factor_'+x] = power_factor;
+        PJ1203A_next_seq(result, priv, x);
         return ;
     }
     
@@ -213,7 +222,8 @@ function PJ1203A_flush_all(result,x,priv,options,clear) {
         result['current_'+x]      = null;
         result['power_factor_'+x] = null;
     }
-    
+
+    PJ1203A_next_seq(result, priv, x);   
     return ;
 }
 
@@ -222,9 +232,9 @@ function PJ1203A_flush_all(result,x,priv,options,clear) {
 // power_factor_x=100.
 //
 // So if we see a datapoint for current_x==0 or power_x==0
-// then we can safely assume that we are in that no-flow state.
+// then we can safely assume that we are in that zero energy state.
 //
-function PJ1203A_flush_no_flow(result,x,priv,options) {
+function PJ1203A_flush_zero(result,x,priv,options) {
     priv['energy_flow_'+x] = "consuming" ; 
     priv['power_'+x] = 0 ;
     priv['current_'+x] = 0 ;
@@ -255,6 +265,7 @@ const PJ1203A_valueConverters = {
 
                 if ( publishing_mode == 'immediate' ) {
                     result['energy_flow_'+x] = flow;
+                    PJ1203A_next_seq(result, priv, x);   
                 } else if ( publishing_mode == 'at_energy_flow' ) {
                     PJ1203A_flush_all(result, x, priv, options, true); 
                 }
@@ -276,14 +287,15 @@ const PJ1203A_valueConverters = {
                 priv['power_'+x] = power_x;  
 
                 if (v==0) {
-                    PJ1203A_flush_no_flow(result, x, priv, options);
+                    PJ1203A_flush_zero(result, x, priv, options);
                     return result;
                 }
 
                 let publishing_mode = PJ1203A_get_publishing_mode(options) ;
                 if ( publishing_mode == 'immediate' ) {
                     result['power_'+x] = power_x;
-                }
+                    PJ1203A_next_seq(result, priv, x);   
+               }
                 
                 return result;
             }
@@ -301,13 +313,14 @@ const PJ1203A_valueConverters = {
                 priv['current_'+x] = current_x ;  
 
                 if (v==0) {
-                    PJ1203A_flush_no_flow(result, x, priv, options);
+                    PJ1203A_flush_zero(result, x, priv, options);
                     return result;                    
                 }
 
                 let publishing_mode = PJ1203A_get_publishing_mode(options) ;
                 if ( publishing_mode == 'immediate' ) {
                     result['current_'+x] = current_x;
+                    PJ1203A_next_seq(result, priv, x);   
                 }
                 
                 return result;
@@ -324,10 +337,10 @@ const PJ1203A_valueConverters = {
                 let power_factor_x = v ;
                 
                 priv['power_factor_'+x] = power_factor_x ;  
-                
                 let publishing_mode = PJ1203A_get_publishing_mode(options) ;
                 if ( publishing_mode == 'immediate' ) {
                     result['power_factor_'+x] = power_factor_x ;
+                    PJ1203A_next_seq(result, priv, x);   
                 } else if (publishing_mode == 'at_power_factor' ) {
                     PJ1203A_flush_all(result, x, priv, options, true); 
                 }            
@@ -396,11 +409,16 @@ const PJ1203A_fz_datapoints = {
         
         priv.last_seq =  msg.data.seq;
 
+
+        
         // Uncomment to display private data in the state (for debug)   
         // result['priv'] = priv ;
 
         // Uncomment to display device data in the state (for debug)   
         // result['device'] = meta.device ;
+        
+        // Uncomment to display the whole message in the state (for debug)   
+        result['msg'] = msg ;
         
         // And finally, perform the dp convertion with tuya.fz.datapoints  
         Object.assign( result, tuya.fz.datapoints.convert(model, msg, publish, options, meta) ) ;
@@ -430,13 +448,16 @@ const definition = {
             PJ1203A_options.missing_data_behavior(),
         ],
         exposes: [
-            e.ac_frequency(), e.voltage(),
             tuya.exposes.powerWithPhase('a'), tuya.exposes.powerWithPhase('b'), tuya.exposes.powerWithPhase('ab'),
             tuya.exposes.currentWithPhase('a'), tuya.exposes.currentWithPhase('b'),
             tuya.exposes.powerFactorWithPhase('a'), tuya.exposes.powerFactorWithPhase('b'),
             tuya.exposes.energyFlowWithPhase('a'), tuya.exposes.energyFlowWithPhase('b'),
             tuya.exposes.energyWithPhase('a'), tuya.exposes.energyWithPhase('b'),
             tuya.exposes.energyProducedWithPhase('a'), tuya.exposes.energyProducedWithPhase('b'),
+            e.ac_frequency(),
+            e.voltage(),
+            e.numeric('counter_a', ea.STATE).withDescription('Counter for phase a updates (16bits)'),
+            e.numeric('counter_b', ea.STATE).withDescription('Counter for phase b updates (16bits)'),
             e.numeric('update_frequency',ea.STATE_SET).withUnit('s').withDescription('Update frequency').withValueMin(3).withValueMax(60),
         ],
         meta: {
