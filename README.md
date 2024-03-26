@@ -37,16 +37,23 @@ Another issue is that zigbee messages can be lost or reordered. A MQTT client ha
 
 My converter is attempting to solve those issues by delaying the publication of `energy_flow_x`, `power_x`, `current_x` and `power_factor_x` until a complete and hopefully coherent set to attributes is available. It also tries to detect missing or reordered zigbee messages. 
 
+## New features
+
+The default behavior should be pretty much identical to the default converter but some options
+are provided to enable the new features. 
+
+Please refer to the options descriptions and to the code for more details. 
+
+I will not describe everything here because this is likely to change quite often.
+
+The new (optional) features are:
+  - publish `energy_flow_x`, `power_x`, `current_x` and `power_factor_x` together at the end of each update 
+    or during the next update after receiving `energy_flow_x`. 
+  - detect missing or reordered zigbee messages.
+  - multiple possible behaviours when some datapoints are missing or unreliable.
+  - recompute `power_ab` when needed.
+
 ## Known issues
-
-### The attribute power_ab is still reported incorrectly 
-
-If I understand correctly, `power_ab` is defined as `sign_a*power_a + sign_b*power_b` where `sign_a` and `sign_b` are `+1` while `consuming` and `-1` while `producing`. 
-
-Because of the energy flow issue described previously, the signs are obivously not computed correctly so `power_ab` is incoherent when any of the two channel is changing direction. 
-
-It should be possible to recompute it on-the-fly but this is not yet implementd. 
-
 
 ### It was only tested on my `_TZE204_81yrt3lo`
 

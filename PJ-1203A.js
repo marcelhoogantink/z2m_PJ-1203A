@@ -9,6 +9,9 @@ const e = exposes.presets;
 const ea = exposes.access;
 const {Buffer} = require('buffer');
 
+// WARNING !!!! only tested on _TZE204_81yrt3lo
+
+
 // The PJ1203A is sending quick sequence of messages containing a single datapoint.
 // A sequence occurs every `update_frequency` seconds (10s by default) 
 //
@@ -52,70 +55,10 @@ const {Buffer} = require('buffer');
 // The following implementation tries to solve that issue by caching energy_flow_x,
 // current_x, power_x and power_factor_b in an internal private state. 
 // 
-// The option 
-//
-//   'no'      This is the original behavior. The power is provided unsigned.
-//             This is the default mode. 
-//
-//   'yes'     The sign of power_x is obtained from energy_flow_x in the same burst. 
-//
-//   'delayed' The sign of power_x is obtained from energy_flow_x in the NEXT burst.
-//             In practice, that means that power_x is delayed by `update_frequency`
-//             seconds. Also, be aware that power_x will not anymore be synchronized with
-//             current_x, energy_flow_x, power_factor_x and power_ab.
-//
-// Zigbee messages can be missing, reordered or duplicated so matching each power
-// with the proper energy_flow is not always possible. Fortunately, the tuya
-// datapoint messages are numbered so most networking issues can be detected.
-//
-// The behavior when missing or reordered messages are detected between the
-// power_x and the matching energy_flow_x is controlled by the option
-// signed_power_recovery:
-//
-//   'optimistic'   Do as if all messages were received in the proper order. There
-//                  is no guarantee that power_x will be given an accurate sign.
-//
-//   'ignore'       power_x is not published but the old value remains available  
-//                  until better data is obtained.
-//
-//   'clear'        power_x is temporarily set to 'null' until better data is obtained.
-//
-//  
-// IMPORTANT: No attempt is made to fix 'power_ab'. It should probably be
-//            treated as broken on all devices with late 'energy_flow_x'
-//            datapoints. In theory, 'power_ab' could easily be recomputed as 
-//            to 'power_a+power_b' using signed power_a and signed_b.   
-//
-// Also, some private data are stored in 'meta.device._priv' with the
-// following entries:
-//
-//  - 'pending_power_a' and 'pending_power_a'
-//
-//       Contain the last known unsigned power values provided by the datapoints 101 and 105.
-//       
-//       The value can also be null
-//           - at startup (so before receiving the first datapoints 101 and 105)
-//           - or after detecting missing or misordered datapoints (in non-optimistic recovery mode)
-//
-//  - 'pending_power_sign_a' and 'pending_power_sign_a'
-//
-//       Contain the power sign +1 or -1 as defined by the datapoints 102 and 104.
-//
-//       The value can also be null
-//           - at startup (so before receiving the first datapoints 101 and 105)
-//           - or after detecting some missing or misordered datapoints (in non-optimistic recovery mode)
-//
-//  - 'last_seq'
-//
-//       The 'seq' value found in the last tuya payload. This is used to detect
-//       missing or reordered messages. 
-//
 
+
+// Store our internal state in meta.device._priv
 function PJ1203A_getPrivateState(meta) {
-    return meta.device._priv ;
-}
-
-function PJ1203A_providePrivateState(meta) {
     if ( ! ('_priv' in meta.device) ) {
         meta.device._priv = {
             'energy_flow_a': null, 
@@ -128,8 +71,14 @@ function PJ1203A_providePrivateState(meta) {
             'power_factor_b': null,
             'last_seq': -99999,
             'counter_a':0,  
-            'counter_b':0,  
-         } ;
+            'counter_b':0,
+            // Also save the last published values of energy_flow_x and energy_power_x
+            // to recompute power_ab
+            'pub_energy_flow_a': null,
+            'pub_energy_flow_b': null,
+            'pub_power_a': null,
+            'pub_power_b': null,            
+        } ;
     }      
     return meta.device._priv ;
 }
@@ -140,9 +89,7 @@ const PJ1203A_SEQ_INCREMENT = 256 ;
 
 
 const PJ1203A_options = {
-    missing_message_detection: () => exposes.binary('missing_message_detection', ea.SET, true, false )
-        .withDescription(
-            'Discard all pending data when missing or reordered messages are detected. Default is false'),
+    
     publishing_mode: () => exposes.enum('publishing_mode', ea.SET, ['immediate','at_power_factor','at_energy_flow'] )
         .withDescription(
             'Define when energy_flow_x, power_x, current_x and power_factor_x are published.'+
@@ -150,8 +97,15 @@ const PJ1203A_options = {
                 ' With \'at_power_factor\' they are published together after receiving power_factor_x.'+
                 ' With \'at_energy_flow\' they are published together after receiving energy_flow_x'+
                 ' which typically happens during the next update ; this is slower but can provide'+
-                ' more accurate energy flow direction on some devices'                
+                ' more accurate energy flow direction on some (or all?) devices'                
         ),
+    
+    missing_message_detection: () => exposes.binary('missing_message_detection', ea.SET, true, false )
+        .withDescription(
+            'Discard all pending data when missing or reordered messages are detected. Default is false.'+
+               ' That has no effect in \'immediate\' publishing mode. '
+        ),
+
     missing_data_behavior: () => exposes.enum('missing_data_behavior', ea.SET, ['keep_missing','keep_all','nullify_missing', 'nullify_all' ] )
         .withDescription(
             'Define the behavior when some of energy_flow_x, power_x, current_x and power_factor_x are missing.'+
@@ -159,7 +113,15 @@ const PJ1203A_options = {
                 ' With \'keep_missing\' the missing attributes keep they old value. '+
                 ' With \'keep_all\' (the default) no attribute is published so they all keep they old value. '+
                 ' With \'nullify_missing\' the missing attributes are set to null. '+
-                ' With \'nullify_all\' all attributes are set to null'),
+                ' With \'nullify_all\' all attributes are set to null'
+        ),    
+    power_ab_mode: () =>
+    exposes.enum('power_ab_mode', ea.SET, ['immediate','recompute'] )
+        .withDescription(
+            'Define how and when power_ab is published.'+
+                ' With \'immediate\' (the default) the value received from the device is immediately published.'+
+                ' With \'recompute\' the value is recomputed after each publication of power_x or energy_flow_x.'
+        ),
 };
 
 function PJ1203A_get_missing_message_detection(options) {
@@ -174,10 +136,63 @@ function PJ1203A_get_missing_data_behavior(options) {
     return options?.missing_data_behavior || 'keep_all' ;
 }
 
-// Change the counter_a or counter_b attribute 
-function PJ1203A_next_seq(result,priv,x) {
+function PJ1203A_get_power_ab_mode(options) {
+    return options?.power_ab_mode || 'immediate' ;
+}
+
+// Increment the counter_a or counter_b attribute 
+function PJ1203A_next_counter(result,priv,x) {
     let counter_x = 'counter_'+x ;
     result[counter_x] = priv[counter_x] = ( priv[counter_x] + 1 ) & 0xFFFF ;
+}
+
+// Detect all publications of power_a, power_b, energy_flow_a and energy_flow_b
+// and recompute power_ab when needed.
+function PJ1203A_recompute_power_ab(result,priv,options) {
+
+    let modified = false ;
+
+    if ( 'power_a' in result ) {
+        priv.pub_power_a = result.power_a ;
+        modified = true ;
+    }
+    if ( 'power_b' in result ) {
+        priv.pub_power_b = result.power_b ;
+        modified = true ;
+    }
+    if ( 'energy_flow_a' in result ) {
+        priv.pub_energy_flow_a = result.energy_flow_a ;
+        modified = true ;
+    }
+    if ( 'energy_flow_b' in result ) {
+        priv.pub_energy_flow_b = result.energy_flow_b ;
+        modified = true ;
+    }    
+    
+    if ( modified && PJ1203A_get_power_ab_mode(options) == 'recompute' ) {
+        if ( priv.pub_energy_flow_a!==null &&
+             priv.pub_energy_flow_b!==null &&
+             priv.pub_power_a!==null &&
+             priv.pub_power_b!==null ) {
+
+            
+            let power_a = priv.pub_power_a;
+            if ( priv.pub_energy_flow_a=='producing' )
+                power_a = -power_a ;
+            
+            let power_b = priv.pub_power_b; 
+            if ( priv.pub_energy_flow_b=='producing' )
+                power_b = -power_b ;
+
+            
+            // Note: We need to "cancel" and reapply the scaly by 10
+            //       because of annoying floating-point rounding errors.
+            //       For example:
+            //          79.8-37.1  --> 42.699999999999996
+            result['power_ab'] = Math.round(10*power_a + 10*power_b) / 10 ;
+
+        }
+    }
 }
 
 function PJ1203A_flush_all(result,x,priv,options,clear) {
@@ -197,7 +212,7 @@ function PJ1203A_flush_all(result,x,priv,options,clear) {
         result['power_'+x]        = power;
         result['current_'+x]      = current;
         result['power_factor_'+x] = power_factor;
-        PJ1203A_next_seq(result, priv, x);
+        PJ1203A_next_counter(result, priv, x);
         return ;
     }
     
@@ -222,8 +237,8 @@ function PJ1203A_flush_all(result,x,priv,options,clear) {
         result['current_'+x]      = null;
         result['power_factor_'+x] = null;
     }
-
-    PJ1203A_next_seq(result, priv, x);   
+    PJ1203A_recompute_power_ab(result,priv,options);
+    PJ1203A_next_counter(result, priv, x);   
     return ;
 }
 
@@ -247,7 +262,7 @@ const PJ1203A_valueConverters = {
     energy_flow: (x) =>  {
         return {
             from: (v, meta, options) => {
-                let priv = PJ1203A_providePrivateState(meta) ;
+                let priv = PJ1203A_getPrivateState(meta) ;
                 let result = {} ;           
 
                 let flow ;                
@@ -265,12 +280,13 @@ const PJ1203A_valueConverters = {
 
                 if ( publishing_mode == 'immediate' ) {
                     result['energy_flow_'+x] = flow;
-                    PJ1203A_next_seq(result, priv, x);   
+                    PJ1203A_recompute_power_ab(result,priv,options);
+                    PJ1203A_next_counter(result, priv, x);   
                 } else if ( publishing_mode == 'at_energy_flow' ) {
                     PJ1203A_flush_all(result, x, priv, options, true); 
                 }
 
-               return result ;
+                return result ;
             } 
         };
     }, // end of energy_flow:
@@ -279,7 +295,7 @@ const PJ1203A_valueConverters = {
         return {
             from: (v, meta, options) => {
 
-                let priv = PJ1203A_providePrivateState(meta) ;
+                let priv = PJ1203A_getPrivateState(meta) ;
                 let result = {} ;
 
                 let power_x =  v / 10.0 ;
@@ -294,8 +310,9 @@ const PJ1203A_valueConverters = {
                 let publishing_mode = PJ1203A_get_publishing_mode(options) ;
                 if ( publishing_mode == 'immediate' ) {
                     result['power_'+x] = power_x;
-                    PJ1203A_next_seq(result, priv, x);   
-               }
+                    PJ1203A_recompute_power_ab(result,priv,options);
+                    PJ1203A_next_counter(result, priv, x);   
+                }
                 
                 return result;
             }
@@ -306,7 +323,7 @@ const PJ1203A_valueConverters = {
         return {
             from: (v, meta, options) => {
 
-                let priv = PJ1203A_providePrivateState(meta) ;
+                let priv = PJ1203A_getPrivateState(meta) ;
                 let result = {} ;
                 let current_x = v / 1000.0 ;
                 
@@ -320,7 +337,7 @@ const PJ1203A_valueConverters = {
                 let publishing_mode = PJ1203A_get_publishing_mode(options) ;
                 if ( publishing_mode == 'immediate' ) {
                     result['current_'+x] = current_x;
-                    PJ1203A_next_seq(result, priv, x);   
+                    PJ1203A_next_counter(result, priv, x);   
                 }
                 
                 return result;
@@ -332,7 +349,7 @@ const PJ1203A_valueConverters = {
         return {
             from: (v, meta, options) => {
 
-                let priv = PJ1203A_providePrivateState(meta) ;
+                let priv = PJ1203A_getPrivateState(meta) ;
                 let result = {} ;
                 let power_factor_x = v ;
                 
@@ -340,14 +357,29 @@ const PJ1203A_valueConverters = {
                 let publishing_mode = PJ1203A_get_publishing_mode(options) ;
                 if ( publishing_mode == 'immediate' ) {
                     result['power_factor_'+x] = power_factor_x ;
-                    PJ1203A_next_seq(result, priv, x);   
+                    PJ1203A_next_counter(result, priv, x);   
                 } else if (publishing_mode == 'at_power_factor' ) {
                     PJ1203A_flush_all(result, x, priv, options, true); 
                 }            
                 return result;
             }
         };
-    },  // end of current: 
+    },  // end of power_factor: 
+    
+    power_ab: () => {
+        return {
+            from: (v, meta, options) => {
+
+                let priv = PJ1203A_getPrivateState(meta) ;
+                let result = {} ;
+
+                if ( PJ1203A_get_power_ab_mode(options) == 'immediate' ) {
+                    result['power_ab'] = v / 10.0 ;
+                }
+                return result;
+            }
+        };
+    },  // end of power_ab: 
     
 };
 
@@ -361,17 +393,17 @@ const PJ1203A_valueConverters = {
 // below in PJ1203A_fz_datapoints).
 //
 const PJ1203A_ignore_tuya_set_time = {
-   cluster: 'manuSpecificTuya',
-   type: ['commandMcuSyncTime'],
-   convert: (model, msg, publish, options, meta) =>
-   {
-       // There is no 'seq' field in the msg payload of 'commandMcuSyncTime'
-       // but the device is increasing its counter. 
-       let priv = PJ1203A_providePrivateState(meta) ;
-       priv.last_seq += PJ1203A_SEQ_INCREMENT ;
-   }
+    cluster: 'manuSpecificTuya',
+    type: ['commandMcuSyncTime'],
+    convert: (model, msg, publish, options, meta) =>
+    {
+        // There is no 'seq' field in the msg payload of 'commandMcuSyncTime'
+        // but the device is increasing its counter. 
+        let priv = PJ1203A_getPrivateState(meta) ;
+        priv.last_seq += PJ1203A_SEQ_INCREMENT ;
+    }
 };
-    
+
 //
 // This is basically tuya.fz.datapoints extended to detect missing
 // or reordered messages.
@@ -388,7 +420,7 @@ const PJ1203A_fz_datapoints = {
         // when random messages are lost 
         // if ( Math.random() < 0.05 ) return ;      
         
-        let priv = PJ1203A_providePrivateState(meta) ;
+        let priv = PJ1203A_getPrivateState(meta) ;
 
         if ( PJ1203A_get_missing_message_detection(options) ) {
             // Detect missing or re-ordered messages but allow duplicate messages.
@@ -408,8 +440,6 @@ const PJ1203A_fz_datapoints = {
         }
         
         priv.last_seq =  msg.data.seq;
-
-
         
         // Uncomment to display private data in the state (for debug)   
         // result['priv'] = priv ;
@@ -418,9 +448,9 @@ const PJ1203A_fz_datapoints = {
         // result['device'] = meta.device ;
         
         // Uncomment to display the whole message in the state (for debug)   
-        result['msg'] = msg ;
+        // result['msg'] = msg ;
         
-        // And finally, perform the dp convertion with tuya.fz.datapoints  
+        // And finally, process the dp with tuya.fz.datapoints 
         Object.assign( result, tuya.fz.datapoints.convert(model, msg, publish, options, meta) ) ;
 
         return result;
@@ -432,56 +462,59 @@ const PJ1203A_tz_datapoints = {
     key: [ 'update_frequency' ]
 };
 
-// WARNING !!!! only tested on _TZE204_81yrt3lo
 const definition = {
-        fingerprint: tuya.fingerprint('TS0601', ['_TZE204_81yrt3lo', '_TZE200_rks0sgb7']),
-        model: 'PJ-1203A',
-        vendor: 'TuYa',
-        description: 'Bidirectional energy meter with 80A current clamp',
-        fromZigbee: [PJ1203A_fz_datapoints, PJ1203A_ignore_tuya_set_time],  
-        toZigbee: [PJ1203A_tz_datapoints],
-        onEvent: tuya.onEventSetTime,
-        configure: tuya.configureMagicPacket,
-        options: [
-            PJ1203A_options.publishing_mode(),
-            PJ1203A_options.missing_message_detection(),
-            PJ1203A_options.missing_data_behavior(),
+    fingerprint: tuya.fingerprint('TS0601',
+                                  [
+                                      '_TZE204_81yrt3lo',
+                                      // '_TZE200_rks0sgb7'    // not tested 
+                                  ]),
+    model: 'PJ-1203A',
+    vendor: 'TuYa',
+    description: 'Bidirectional energy meter with 80A current clamp (CUSTOMIZED)',
+    fromZigbee: [PJ1203A_fz_datapoints, PJ1203A_ignore_tuya_set_time],  
+    toZigbee: [PJ1203A_tz_datapoints],
+    onEvent: tuya.onEventSetTime,
+    configure: tuya.configureMagicPacket,
+    options: [
+        PJ1203A_options.publishing_mode(),
+        PJ1203A_options.missing_message_detection(),
+        PJ1203A_options.missing_data_behavior(),
+        PJ1203A_options.power_ab_mode(),
+    ],
+    exposes: [
+        tuya.exposes.powerWithPhase('a'), tuya.exposes.powerWithPhase('b'), tuya.exposes.powerWithPhase('ab'),
+        tuya.exposes.currentWithPhase('a'), tuya.exposes.currentWithPhase('b'),
+        tuya.exposes.powerFactorWithPhase('a'), tuya.exposes.powerFactorWithPhase('b'),
+        tuya.exposes.energyFlowWithPhase('a'), tuya.exposes.energyFlowWithPhase('b'),
+        tuya.exposes.energyWithPhase('a'), tuya.exposes.energyWithPhase('b'),
+        tuya.exposes.energyProducedWithPhase('a'), tuya.exposes.energyProducedWithPhase('b'),
+        e.ac_frequency(),
+        e.voltage(),
+        e.numeric('counter_a', ea.STATE).withDescription('Counter for phase a updates (16bits)'),
+        e.numeric('counter_b', ea.STATE).withDescription('Counter for phase b updates (16bits)'),
+        e.numeric('update_frequency',ea.STATE_SET).withUnit('s').withDescription('Update frequency').withValueMin(3).withValueMax(60),
+    ],
+    meta: {
+        tuyaDatapoints: [
+            [111, 'ac_frequency', tuya.valueConverter.divideBy100],
+            [112, 'voltage', tuya.valueConverter.divideBy10],
+            [101, null, PJ1203A_valueConverters.power('a')],        // power_a 
+            [105, null, PJ1203A_valueConverters.power('b')],        // power_b 
+            [113, null, PJ1203A_valueConverters.current('a')],      // current_a 
+            [114, null, PJ1203A_valueConverters.current('b')],      // current_b
+            [110, null, PJ1203A_valueConverters.power_factor('a')], // power_factor_a
+            [121, null, PJ1203A_valueConverters.power_factor('b')], // power_factor_b
+            [102, null, PJ1203A_valueConverters.energy_flow('a')],  // energy_flow_a
+            [104, null, PJ1203A_valueConverters.energy_flow('b')],  // energy_flow_b
+            [115, null, PJ1203A_valueConverters.power_ab()],
+            [106, 'energy_a', tuya.valueConverter.divideBy100],
+            [108, 'energy_b', tuya.valueConverter.divideBy100],
+            [107, 'energy_produced_a', tuya.valueConverter.divideBy100],
+            [109, 'energy_produced_b', tuya.valueConverter.divideBy100],
+            [129, 'update_frequency', tuya.valueConverter.raw],
         ],
-        exposes: [
-            tuya.exposes.powerWithPhase('a'), tuya.exposes.powerWithPhase('b'), tuya.exposes.powerWithPhase('ab'),
-            tuya.exposes.currentWithPhase('a'), tuya.exposes.currentWithPhase('b'),
-            tuya.exposes.powerFactorWithPhase('a'), tuya.exposes.powerFactorWithPhase('b'),
-            tuya.exposes.energyFlowWithPhase('a'), tuya.exposes.energyFlowWithPhase('b'),
-            tuya.exposes.energyWithPhase('a'), tuya.exposes.energyWithPhase('b'),
-            tuya.exposes.energyProducedWithPhase('a'), tuya.exposes.energyProducedWithPhase('b'),
-            e.ac_frequency(),
-            e.voltage(),
-            e.numeric('counter_a', ea.STATE).withDescription('Counter for phase a updates (16bits)'),
-            e.numeric('counter_b', ea.STATE).withDescription('Counter for phase b updates (16bits)'),
-            e.numeric('update_frequency',ea.STATE_SET).withUnit('s').withDescription('Update frequency').withValueMin(3).withValueMax(60),
-        ],
-        meta: {
-            tuyaDatapoints: [
-                [111, 'ac_frequency', tuya.valueConverter.divideBy100],
-                [112, 'voltage', tuya.valueConverter.divideBy10],
-                [101, null, PJ1203A_valueConverters.power('a')],
-                [105, null, PJ1203A_valueConverters.power('b')],
-                [113, null, PJ1203A_valueConverters.current('a')],
-                [114, null, PJ1203A_valueConverters.current('b')],
-                [110, null, PJ1203A_valueConverters.power_factor('a')],
-                [121, null, PJ1203A_valueConverters.power_factor('b')],
-                [102, null, PJ1203A_valueConverters.energy_flow('a')],
-                [104, null, PJ1203A_valueConverters.energy_flow('b')],
-                [115, 'power_ab', tuya.valueConverter.divideBy10],
-
-                [106, 'energy_a', tuya.valueConverter.divideBy100],
-                [108, 'energy_b', tuya.valueConverter.divideBy100],
-                [107, 'energy_produced_a', tuya.valueConverter.divideBy100],
-                [109, 'energy_produced_b', tuya.valueConverter.divideBy100],
-                [129, 'update_frequency', tuya.valueConverter.raw],
-            ],
-        },
-    };
+    },
+};
 
 module.exports = definition;
 
