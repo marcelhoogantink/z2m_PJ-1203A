@@ -53,6 +53,7 @@ The new (optional) features are:
     `power_x`, `current_x` and `power_factor_x`.
   - customizable behaviour when some of `energy_flow_x`, `power_x`, `current_x` and `power_factor_x` are missing.
   - recompute `power_ab` when needed.
+  - add `counter_a` and `counter_b` to keep track of updates on each channel. 
 
 ## Known issues
 
