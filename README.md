@@ -49,8 +49,9 @@ I will not describe everything here because this is likely to change quite often
 The new (optional) features are:
   - publish `energy_flow_x`, `power_x`, `current_x` and `power_factor_x` together at the end of each update 
     or during the next update after receiving `energy_flow_x`. 
-  - detect missing or reordered zigbee messages.
-  - multiple possible behaviours when some datapoints are missing or unreliable.
+  - make sure that no zigbee messages were missing or reordered while collecting `energy_flow_x`, 
+    `power_x`, `current_x` and `power_factor_x`.
+  - customizable behaviour when some of `energy_flow_x`, `power_x`, `current_x` and `power_factor_x` are missing.
   - recompute `power_ab` when needed.
 
 ## Known issues
