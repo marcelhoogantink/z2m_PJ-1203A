@@ -442,17 +442,15 @@ const PJ1203A_fz_datapoints = {
         
         priv.last_seq =  msg.data.seq;
         
-        // Uncomment to display private data in the state (for debug)   
-        // result['priv'] = priv ;
-
         // Uncomment to display device data in the state (for debug)   
         // result['device'] = meta.device ;
         
-        // Uncomment to display the whole message in the state (for debug)   
-        // result['msg'] = msg ;
-        
         // And finally, process the dp with tuya.fz.datapoints 
         Object.assign( result, tuya.fz.datapoints.convert(model, msg, publish, options, meta) ) ;
+
+        // WARNING: MUST BE REMOVED IN FINAL RELEASE
+        meta.logger.debug(`[PJ1203A] priv   = ${JSON.stringify(priv)}`);
+        meta.logger.debug(`[PJ1203A] result = ${JSON.stringify(result)}`);
 
         return result;
     }
