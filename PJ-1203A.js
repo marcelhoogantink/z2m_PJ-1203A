@@ -12,7 +12,6 @@ const {Buffer} = require('buffer');
 // 
 // WARNING !!!! only tested on _TZE204_81yrt3lo
 //
-//
 
 // The PJ1203A is sending quick sequence of messages containing a single datapoint.
 // A sequence occurs every `update_frequency` seconds (10s by default) 
