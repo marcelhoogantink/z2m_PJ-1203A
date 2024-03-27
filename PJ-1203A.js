@@ -443,7 +443,7 @@ const PJ1203A_fz_datapoints = {
         priv.last_seq =  msg.data.seq;
         
         // Uncomment to display private data in the state (for debug)   
-        result['priv'] = priv ;
+        // result['priv'] = priv ;
 
         // Uncomment to display device data in the state (for debug)   
         // result['device'] = meta.device ;
