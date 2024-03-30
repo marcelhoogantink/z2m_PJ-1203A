@@ -69,3 +69,7 @@ Also, the device probably supports OTA updates so a better firmware may exist so
 
 More information are needed. 
 
+UPDATE: Zigbee2mqtt was recently updated to differentiate `_TZE200_rks0sgb7`
+and `_TZE204_81yrt3lo`. Both devices do not even use the same datapoints so my modified
+converter is obviously not suitable for the `_TZE200_rks0sgb7`. 
+
