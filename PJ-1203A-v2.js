@@ -41,21 +41,6 @@ const {Buffer} = require('buffer');
 //
 // The other datapoints are emitted every few minutes.  
 // 
-// Ideally, each 'energy_flow_x' should be intepreted as the direction 
-// of the 'current_x' and 'power_x' in the same group of message.
-// This is unfortunately not the case. For at least some versions (e.g. _TZE204_81yrt3lo),
-// the proper 'energy_flow_x' is only provided in the NEXT sequence of messages so
-// after a delay of 'update_frequency'.   
-//
-// For example, that means that when switching from "producing 100W" to
-// "consuming 500W", there will be an intermediate state showing "producing 500W".
-//
-// It is unclear if that problem exists in all versions. An OTA update may even
-// be available. More information needed!!!! 
-// 
-// The following implementation tries to solve that issue by caching energy_flow_x,
-// current_x, power_x and power_factor_b in an internal private state. 
-// 
 
 
 // Store our internal state in meta.device._priv
@@ -71,8 +56,8 @@ function PJ1203A_getPrivateState(meta) {
             'power_factor_a': null,
             'power_factor_b': null,
             'last_seq': -99999,
-            'counter_a':0,  
-            'counter_b':0,
+            'updated_a':0,  
+            'updated_b':0,
             // Also save the last published values of power_a and power_b
             // to recompute power_ab on the fly.
             'pub_power_a': null,
@@ -100,10 +85,10 @@ function PJ1203A_get_energy_flow_qwirk(options) {
     return options?.energy_flow_qwirk || false ;
 }
 
-// Increment the counter_a or counter_b attribute 
-function PJ1203A_next_counter(result,priv,x) {
-    let counter_x = 'counter_'+x ;
-    result[counter_x] = priv[counter_x] = (priv[counter_x]+1) % 1000  ;
+// Increment the updated_a or updated_b attribute 
+function PJ1203A_next_update_id(result,priv,x) {
+    let updated_x = 'updated_'+x ;
+    result[updated_x] = priv[updated_x] = (priv[updated_x]+1) % 1000  ;
 }
 
 // Recompute power_ab when power_a or power_b is published.
@@ -133,7 +118,7 @@ function PJ1203A_recompute_power_ab(result,priv,options) {
     }
 }
 
-function PJ1203A_flush_all(result,x,priv,options,clear) {
+function PJ1203A_flush_all(result,x,priv,options) {
 
     let sign         = priv['sign_'+x] ; 
     let power        = priv['power_'+x] ; 
@@ -141,9 +126,7 @@ function PJ1203A_flush_all(result,x,priv,options,clear) {
     let power_factor = priv['power_factor_'+x] ;
 
     // Make sure that we use them only once. No obsolete data!!!!
-    if (clear) {
-        priv['sign_'+x] = priv['power_'+x] = priv['current_'+x] = priv['power_factor_'+x] = null ;
-    }
+    priv['sign_'+x] = priv['power_'+x] = priv['current_'+x] = priv['power_factor_'+x] = null ;
 
     // And only publish after receiving a complete set 
     if ( sign!==null && power!==null && current!==null && power_factor!==null ) {
@@ -151,7 +134,7 @@ function PJ1203A_flush_all(result,x,priv,options,clear) {
         result['current_'+x]      = current;
         result['power_factor_'+x] = power_factor;
         PJ1203A_recompute_power_ab(result,priv,options);
-        PJ1203A_next_counter(result, priv, x);
+        PJ1203A_next_update_id(result, priv, x);
         return ;
     }
     
@@ -166,11 +149,11 @@ function PJ1203A_flush_all(result,x,priv,options,clear) {
 // then we can safely assume that we are in that zero energy state.
 //
 function PJ1203A_flush_zero(result,x,priv,options) {
-    priv['sign_'+x] = +1 ;
+    priv['sign_'+x] = +1 ; 
     priv['power_'+x] = 0 ;
     priv['current_'+x] = 0 ;
     priv['power_factor_'+x] = 100 ;
-    PJ1203A_flush_all(result, x, priv,options, false); 
+    PJ1203A_flush_all(result,x,priv,options); 
 }
 
 const PJ1203A_valueConverters = {
@@ -235,7 +218,7 @@ const PJ1203A_valueConverters = {
 
                 let energy_flow_qwirk = PJ1203A_get_energy_flow_qwirk()
                 if ( ! energy_flow_qwirk ) {
-                    PJ1203A_flush_all(result, x, priv, options, true); 
+                    PJ1203A_flush_all(result, x, priv, options); 
                 }            
                 return result;
             }
@@ -356,8 +339,8 @@ const definition = {
         tuya.exposes.energyProducedWithPhase('a'), tuya.exposes.energyProducedWithPhase('b'),
         e.ac_frequency(),
         e.voltage(),
-        e.numeric('counter_a', ea.STATE).withDescription('Counter for phase a updates (16bits)'),
-        e.numeric('counter_b', ea.STATE).withDescription('Counter for phase b updates (16bits)'),
+        e.numeric('updated_a', ea.STATE).withDescription('Modified after each update of channel a'),
+        e.numeric('updated_b', ea.STATE).withDescription('Modified after each update of channel b'),
         e.numeric('update_frequency',ea.STATE_SET).withUnit('s').withDescription('Update frequency').withValueMin(3).withValueMax(60),
     ],
     meta: {

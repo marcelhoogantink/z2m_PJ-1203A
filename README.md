@@ -59,48 +59,35 @@ This is a simplified variant with the following features:
   - a single option to delay the publication until the next update (see above).
   - for each channel, the power, current, power factor and energy flow datapoints 
     are collected and are published together. Nothing is published when some of 
-    them are missing of if some zigbee messages were lost or reordered (i.e. the 
+    them are missing or if some zigbee messages were lost or reordered (the 
     collected data may not be coherent).
   - `energy_flow_a` and `energy_flow_b` are not published anymore. Instead `power_a`
     and `power_b` are signed values: positive while consuming and negative 
     while producing.
-  - A new attribute `counter_x` is publied every time `power_x`, `current_x`, 
+  - A new attribute `update_x` is publied every time `power_x`, `current_x`, 
     `power_factor_x` are successfully updated on channel `x`. Only the changes 
-    to `counter_x` are relevant while its actual value is not (e.g. an increase
-    by more than one does not indicate that an update was missed). 
-
-## New features
-
-The default behavior should be pretty much identical to the default converter but some options
-are provided to enable the new features. 
-
-Please refer to the options descriptions and to the code for more details. 
-
-I will not describe everything here because this is likely to change quite often.
-
-The new (optional) features are:
-  - publish `energy_flow_x`, `power_x`, `current_x` and `power_factor_x` together at the end of each update 
-    or during the next update after receiving `energy_flow_x`. 
-  - make sure that no zigbee messages were missing or reordered while collecting `energy_flow_x`, 
-    `power_x`, `current_x` and `power_factor_x`.
-  - customizable behaviour when some of `energy_flow_x`, `power_x`, `current_x` and `power_factor_x` are missing.
-  - recompute `power_ab` when needed.
-  - add `counter_a` and `counter_b` to keep track of updates on each channel. 
+    to `update_x` are relevant while the actual values are not (e.g. a reset or
+    an increase by more than 1 is possible and does NOT indicate that an update 
+    was missed). 
 
 ## Known issues
 
-### It was only tested on my `_TZE204_81yrt3lo`
+My converters have to assume that the device is sending the datapoints in a specific 
+order which may not always be true. 
 
-There is also a `_TZE200_rks0sgb7` variant that may or may not have the same issues. 
+The device probably supports OTA updates so a better firmware may exist somewhere.
 
-More generally, my converter has to assume that the device is sending the datapoints 
-in a specific order. 
+Assuming that you have `jq` (https://jqlang.github.io/jq), the relevant information 
+can be found in `database.db` with 
 
-Also, the device probably supports OTA updates so a better firmware may exist somewhere.
 
-More information are needed. 
+```
+jq '. | select(.modelId=="TS0601") | {modelId,manufName,appVersion,stackVersion,hwVersion}'  database.db 
+```
 
-UPDATE: Zigbee2mqtt was recently updated to differentiate `_TZE200_rks0sgb7`
-and `_TZE204_81yrt3lo`. Both devices do not even use the same datapoints so my modified
-converter is obviously not suitable for the `_TZE200_rks0sgb7`. 
+Otherwise, search `manufName`, `appVersion`, `stackVersion` and `hwVersion` for your TS0601 device.
+
+Currently tested on:
+  - `_TZE204_81yrt3lo` with appVersion 74, stackVersion 0 and hwVersion 1
+  
 
