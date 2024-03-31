@@ -73,7 +73,7 @@ const PJ1203A_SEQ_INCREMENT = 256 ;
 
 const PJ1203A_options = {
     
-    energy_flow_qwirk: () => exposes.enum('v2_energy_flow_qwirk', ea.SET, [true,false] )
+    energy_flow_qwirk: () => exposes.binary('energy_flow_qwirk', ea.SET, true, false )
         .withDescription(
             ' If true then use the next energy flow datapoint before publishing grouped data.'+
                 ' The default is false.'
