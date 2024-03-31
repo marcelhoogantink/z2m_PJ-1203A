@@ -162,8 +162,13 @@ const PJ1203A_valueConverters = {
         return {
             from: (v, meta, options) => {
                 let priv = PJ1203A_getPrivateState(meta) ;               
-                priv['sign_'+x] = (v==1) ? -1 : +1  ; 
-                return {} ;
+                let result = {} ;
+                priv['sign_'+x] = (v==1) ? -1 : +1  ;
+                let energy_flow_qwirk = PJ1203A_get_energy_flow_qwirk(options)
+                if (energy_flow_qwirk) {
+                    PJ1203A_flush_all(result, x, priv, options); 
+                }    
+                return result;
             } 
         };
     }, // end of energy_flow:
@@ -216,8 +221,8 @@ const PJ1203A_valueConverters = {
                 let result = {} ;
                 priv['power_factor_'+x] = v ;  
 
-                let energy_flow_qwirk = PJ1203A_get_energy_flow_qwirk()
-                if ( ! energy_flow_qwirk ) {
+                let energy_flow_qwirk = PJ1203A_get_energy_flow_qwirk(options)
+                if (!energy_flow_qwirk) {
                     PJ1203A_flush_all(result, x, priv, options); 
                 }            
                 return result;
