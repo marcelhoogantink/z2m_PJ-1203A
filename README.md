@@ -70,6 +70,14 @@ This is a simplified variant with the following features:
     an increase by more than 1 is possible and does NOT indicate that an update 
     was missed). 
 
+## PJ_1203A-v3.js
+
+Similar to PJ_1203A-v2 with the followwing changes:
+  - An option to control how the energy flow direction should be reported:  
+     consuming/producing in `energy_flow_x` or signed `power_x` (and `energy_flow_x`
+     is set to 'sign')
+  - Separate options for channels A and B (where applicable).
+
 ## Known issues
 
 My converters have to assume that the device is sending the datapoints in a specific 
