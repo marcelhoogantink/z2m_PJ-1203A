@@ -77,6 +77,66 @@ Similar to PJ_1203A-v2 with the followwing changes:
      consuming/producing in `energy_flow_x` or signed `power_x` (and `energy_flow_x`
      is set to 'sign')
   - Separate options for channels A and B (where applicable).
+  - `update_a` and `update_b` are replaced by `timestamp_a` and `timestamp_b`
+    whose value indicates when the power datapoint was received in ISO_8601 format.
+    That makes them valid timestamps in Home Assistant (see below).
+    
+## Home Assistant autodiscovery & Timestamps 
+
+Home Assistant requires autodiscovery messages to configure the device entities. 
+Z2M is supposed to take care of that automatically but unfortunately some important information are derived from the attribute name which is problematic for converters using 'non-standard' names. For example, the `device_class` is automatically set to `current` for attributes with name `current`, `current_phase_b` and `current_phase_c` but not for `current_a` and `current_b`. 
+
+For non-stanard attributes, the configuration cannot be done from the converter code. I recently filled a feature request to improve the situation  https://github.com/Koenkk/zigbee2mqtt/issues/22098 but for now, the configuration must be done manually either in zigbee2mqtt or in Homme Assistant.
+
+My `zigbee2mqtt/data/configuration.yaml` contains the following entries for the PJ1203A device:
+
+```
+    homeassistant:
+      power_a:
+        device_class: power
+        entity_category: diagnostic
+        state_class: measurement
+      power_b:
+        device_class: power
+        entity_category: diagnostic
+        state_class: measurement
+      power_ab:
+        device_class: power
+        entity_category: diagnostic
+        state_class: measurement
+      current_a:
+        device_class: current
+   	    entity_category: diagnostic
+	    state_class: measurement
+	    enabled_by_default: false
+      current_b:
+        device_class: current
+        entity_category: diagnostic
+        state_class: measurement
+        enabled_by_default: false
+      timestamp_a:
+        icon: mdi:clock
+        device_class: timestamp
+        entity_category: diagnostic
+	    enabled_by_default: false
+      timestamp_b:
+	    icon: mdi:clock
+	    device_class: timestamp
+	    entity_category: diagnostic
+	    enabled_by_default: false
+```
+
+The effects in HA are:
+  - entities are assigned a default icon. 
+  - statistics are enabled in `power_a`, `power_b`,`power_ab`, `current_a` and `current_b` so they can be displayed in statistics graphs. 
+  - `timestamp_a` and `timestamp_b` are recognised as proper timestamp and will be displayed as `XXX seconds ago`
+
+It should be noted that the default integration is correct for all energy attributes since usint `Wh` and `kWh` are handled differently. 
+
+### References
+  
+  - MQTT Discovery documentation https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
+  - The current implementation in zigbee2mqtt https://github.com/Koenkk/zigbee2mqtt/blob/master/lib/extension/homeassistant.ts 
 
 ## Known issues
 

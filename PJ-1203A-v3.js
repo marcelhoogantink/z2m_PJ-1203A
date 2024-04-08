@@ -56,8 +56,8 @@ function PJ1203A_getPrivateState(meta) {
             'power_factor_a': null,
             'power_factor_b': null,
             'last_seq': -99999,
-            'updated_a':0,  
-            'updated_b':0,
+            'timestamp_a': null,
+            'timestamp_b': null,
             // Also save the last published signed values of power_a and power_b
             // to recompute power_ab on the fly.
             'pub_power_a': null,
@@ -100,12 +100,6 @@ function PJ1203A_get_signed_power(options,x) {
         return options[key]
     else
         false ;
-}
-
-// Increment the updated_a or updated_b attribute 
-function PJ1203A_next_update_id(result,priv,x) {
-    let updated_x = 'updated_'+x ;
-    result[updated_x] = priv[updated_x] = (priv[updated_x]+1) % 1000  ;
 }
 
 // Recompute power_ab when power_a or power_b is published.
@@ -152,18 +146,19 @@ function PJ1203A_flush_all(result,x,priv,options) {
         if ( PJ1203A_get_signed_power(options,x) ) {
             result['power_'+x]        = sign * power ;
             result['energy_flow_'+x]  = 'sign';
+
         } else {
             result['power_'+x]        =  power ;
             result['energy_flow_'+x]  = (sign>0) ? 'consuming' : 'producing' ;
         }
+        result['timestamp_'+x]    = priv['timestamp_'+x];
         result['current_'+x]      = current;
         result['power_factor_'+x] = power_factor;
         PJ1203A_recompute_power_ab(result,priv,options);
-        PJ1203A_next_update_id(result, priv, x);
-        return ;
+        return true;
     }
     
-    return ;
+    return false;
 }
 
 // When the device does not detect any flow, it stops sending 
@@ -176,6 +171,7 @@ function PJ1203A_flush_all(result,x,priv,options) {
 function PJ1203A_flush_zero(result,x,priv,options) {
     priv['sign_'+x] = +1 ; 
     priv['power_'+x] = 0 ;
+    priv['timestamp_'+x] = new Date().toISOString() ;
     priv['current_'+x] = 0 ;
     priv['power_factor_'+x] = 100 ;
     PJ1203A_flush_all(result,x,priv,options); 
@@ -191,7 +187,9 @@ const PJ1203A_valueConverters = {
                 priv['sign_'+x] = (v==1) ? -1 : +1  ;
                 let energy_flow_qwirk = PJ1203A_get_energy_flow_qwirk(options,x)
                 if (energy_flow_qwirk) {
-                    PJ1203A_flush_all(result, x, priv, options); 
+                    PJ1203A_flush_all(result, x, priv, options);
+                    if ( 'updated_'+x in  result ) {
+                    }
                 }    
                 return result;
             } 
@@ -207,7 +205,8 @@ const PJ1203A_valueConverters = {
                 let power_x =  v / 10.0 ;
                 
                 priv['power_'+x] = power_x;  
-
+                priv['timestamp_'+x] = new Date().toISOString()
+                
                 if (v==0) {
                     PJ1203A_flush_zero(result, x, priv, options);
                     return result;
@@ -375,8 +374,8 @@ const definition = {
         tuya.exposes.energyProducedWithPhase('b'),
         e.ac_frequency(),
         e.voltage(),
-        e.numeric('updated_a', ea.STATE).withDescription('Modified after each update of channel A'),
-        e.numeric('updated_b', ea.STATE).withDescription('Modified after each update of channel B'),
+        e.numeric('timestamp_a', ea.STATE).withDescription('Update time of channel A'),
+        e.numeric('timestamp_b', ea.STATE).withDescription('Update time of channel B'),
         e.numeric('update_frequency',ea.STATE_SET).withUnit('s').withDescription('Update frequency').withValueMin(3).withValueMax(60),
     ],
     meta: {
