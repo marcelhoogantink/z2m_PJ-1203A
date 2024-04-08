@@ -204,8 +204,8 @@ recorder:
       - sensor.energy_meter_power_factor_b
 ```
 
-Also, I am using the following shell script to count the number of entries per entity
-in the HA database. They should stop growing once the recording is disabled.
+Also, I am using the following sqlite3 query to count the number of entries per entity
+in the HA database. They should stop growing once recording is disabled.
 
 ```sh
 #!/bin/sh
