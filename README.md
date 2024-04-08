@@ -56,7 +56,7 @@ It works but, IMHO it is far too complex.
 ## PJ_1203A-v2.js
 
 This is a simplified variant with the following features:
-  - a single option to delay the publication until the next update (see above).
+  - a single option to delay the publication until the next update (see the bug described above).
   - for each channel, the power, current, power factor and energy flow datapoints 
     are collected and are published together. Nothing is published when some of 
     them are missing or if some zigbee messages were lost or reordered (the 
@@ -74,12 +74,12 @@ This is a simplified variant with the following features:
 
 Similar to PJ_1203A-v2 with the followwing changes:
   - An option to control how the energy flow direction should be reported:  
-     consuming/producing in `energy_flow_x` or signed `power_x` (and `energy_flow_x`
-     is set to 'sign')
+     `consuming` or `producing` in `energy_flow_x` or as the sign of `power_x` (in 
+     which case `energy_flow_x` is set to `sign`)
   - Separate options for channels A and B (where applicable).
   - `update_a` and `update_b` are replaced by `timestamp_a` and `timestamp_b`
-    whose value indicates when the power datapoint was received in ISO_8601 format.
-    That makes them valid timestamps in Home Assistant (see below).
+    whose values indicate when the corresponding power datapoint was received 
+    in ISO_8601 format. That makes them valid timestamps in Home Assistant (see below).
     
 ## Home Assistant autodiscovery & Timestamps 
 
@@ -128,11 +128,14 @@ My `zigbee2mqtt/data/configuration.yaml` contains the following entries for the 
 
 The effects in HA are the following:
   - entities are assigned a proper icon. 
-  - statistics are enabled in `power_a`, `power_b`,`power_ab`, `current_a` and `current_b` so they can be displayed in statistics graphs. 
-  - `timestamp_a` and `timestamp_b` are recognised as proper timestamp and will be displayed as `XXX seconds ago` 
+  - statistics are enabled in `power_a`, `power_b`,`power_ab`, `current_a` and `current_b` so they 
+  can be displayed in statistics graphs. 
+  - `timestamp_a` and `timestamp_b` are recognised as proper timestamp and will be 
+  displayed as `XXX seconds ago` 
   
 
-It should be noted that the default integration is correct for all energy attributes since usint `Wh` and `kWh` are handled differently. 
+It should be noted that the default integration is correct for all energy
+attributes because `Wh` and `kWh` unit are handled differently.
 
 ### References
   
@@ -172,9 +175,10 @@ The following attributes of the PJ-1203A are updated every `update_frequency` se
   - `timestamp_a` and `timestamp_b` (or `update_a` and `update_b` )
 
 So 10 days with an update frequency of let's say 5 seconds can produce up to `10*24*3600/5 = 172800` 
-entries for each entity.
+entries for each entity. Each entry occupies at least 300 bytes so an entity updated every 5s can 
+increases the size of the database by up to 50MB.
 
-The remianing attributes `ac_frequency`, `ac_voltage`, `energy_a`, `energy_b`, `energy_produced_a` and
+The remaining attributes `ac_frequency`, `ac_voltage`, `energy_a`, `energy_b`, `energy_produced_a` and
 `energy_produced_b` are modified far less frequently and are usually not a problem. 
 
 The first step to prevent the database from growing too much is probably to
@@ -205,7 +209,7 @@ recorder:
 ```
 
 Also, I am using the following sqlite3 query to count the number of entries per entity
-in the HA database. They should stop growing once recording is disabled.
+in the HA database. The number should stop growing once recording is disabled.
 
 ```sh
 #!/bin/sh
