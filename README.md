@@ -215,8 +215,7 @@ They should stop growing once the recording is disabled.
 
 DATABASE="/share/Docker/HomeAssistant/config/home-assistant_v2.db"
 
-sqlite3 "$DATABASE" 'SELECT COUNT(*), states_meta.entity_id  FROM states_meta, states where states_meta.metadata_id = states
-.metadata_id GROUP BY states_meta.entity_id ORDER BY COUNT(*) ;'  ".exit ;"
+sqlite3 "$DATABASE" 'SELECT COUNT(*), states_meta.entity_id  FROM states_meta, states where states_meta.metadata_id = states.metadata_id GROUP BY states_meta.entity_id ORDER BY COUNT(*) ;'  ".exit ;"
 
 ```
 
