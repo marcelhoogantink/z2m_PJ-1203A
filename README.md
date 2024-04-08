@@ -106,9 +106,9 @@ My `zigbee2mqtt/data/configuration.yaml` contains the following entries for the 
         state_class: measurement
       current_a:
         device_class: current
-   	    entity_category: diagnostic
-	    state_class: measurement
-	    enabled_by_default: false
+        entity_category: diagnostic
+        state_class: measurement
+        enabled_by_default: false
       current_b:
         device_class: current
         entity_category: diagnostic
@@ -118,25 +118,26 @@ My `zigbee2mqtt/data/configuration.yaml` contains the following entries for the 
         icon: mdi:clock
         device_class: timestamp
         entity_category: diagnostic
-	    enabled_by_default: false
+        enabled_by_default: false
       timestamp_b:
-	    icon: mdi:clock
-	    device_class: timestamp
-	    entity_category: diagnostic
-	    enabled_by_default: false
+        icon: mdi:clock
+        device_class: timestamp
+        entity_category: diagnostic
+        enabled_by_default: false
 ```
 
-The effects in HA are:
-  - entities are assigned a default icon. 
+The effects in HA are the following:
+  - entities are assigned a proper icon. 
   - statistics are enabled in `power_a`, `power_b`,`power_ab`, `current_a` and `current_b` so they can be displayed in statistics graphs. 
-  - `timestamp_a` and `timestamp_b` are recognised as proper timestamp and will be displayed as `XXX seconds ago`
+  - `timestamp_a` and `timestamp_b` are recognised as proper timestamp and will be displayed as `XXX seconds ago` 
+  
 
 It should be noted that the default integration is correct for all energy attributes since usint `Wh` and `kWh` are handled differently. 
 
 ### References
   
   - MQTT Discovery documentation https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
-  - The current implementation in zigbee2mqtt https://github.com/Koenkk/zigbee2mqtt/blob/master/lib/extension/homeassistant.ts 
+  - The HA integration in zigbee2mqtt https://github.com/Koenkk/zigbee2mqtt/blob/master/lib/extension/homeassistant.ts is a good reference.
 
 ## Known issues
 
