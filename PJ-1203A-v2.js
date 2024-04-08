@@ -33,7 +33,7 @@ const {Buffer} = require('buffer');
 //     115 power_ab
 //
 // It should be noted that when no current is detected on channel x then
-// energy_flow_x is not emited and current_x==0, power_x==0 and energy_flow_x==100.
+// energy_flow_x is not emited and current_x==0, power_x==0 and power_factor_x==100.
 // Simply speaking, energy_flow_x is optional but the case can easily be detected
 // by checking if current_x or power_x is 0.
 //

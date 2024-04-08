@@ -26,7 +26,7 @@ Your systemd service file for zigbee2mqtt is probably redicting stderr. If you w
 
 My converter is based on the version currently found in zigbee2mqtt (as of March 25th 2024) and it should hopefully remain backward compatible with the default values of the new settings.
 
-My main concern with the current `PJ-1203A` converter was what should probably called a bug in the device. For channel x, the 4 attributes `energy_flow_x`, `current_x`, `power_x` and `power_factor_x` are regularly provided in that order. This is a bi-directional sensor so `energy_flow_x` describes the direction of the current and can be either `consuming` or `producing`. Unfortunately, that attribute is not properly synchronized with the other three. In practice, that means that zigbee2mqtt reports a incorrect energy flow during a few seconds when swtiching  between `consuming` and `producing`.
+My main concern with the current `PJ-1203A` converter was what should probably called a bug in the device. For channel x, the 4 attributes `energy_flow_x`, `current_x`, `power_x` and `power_factor_x` are regularly provided in that order. This is a bi-directional sensor so `energy_flow_x` describes the direction of the current and can be either `consuming` or `producing`. Unfortunately, that attribute is not properly synchronized with the other three. In practice, that means that zigbee2mqtt reports a incorrect energy flow during a few seconds when switching  between `consuming` and `producing`.
 
 For example, suppose that some solar panels are producing an excess of 100W and that a device that consumes 500W is turned on. The following MQTT message would be produced:
 
@@ -41,6 +41,7 @@ The second message is obviously incorrect.
 Another issue is that zigbee messages can be lost or reordered. A MQTT client has no way to figure out if the attributes `energy_flow_x`, `power_x`, `current_x` and `power_factor_x` represent a coherent view of a single point in time. Some may be older that others. 
 
 My converter is attempting to solve those issues by delaying the publication of `energy_flow_x`, `power_x`, `current_x` and `power_factor_x` until a complete and hopefully coherent set to attributes is available. It also tries to detect missing or reordered zigbee messages. 
+
 
 ## Variants
 
@@ -222,4 +223,60 @@ DATABASE="/share/Docker/HomeAssistant/config/home-assistant_v2.db"
 sqlite3 "$DATABASE" 'SELECT COUNT(*), states_meta.entity_id  FROM states_meta, states where states_meta.metadata_id = states.metadata_id GROUP BY states_meta.entity_id ORDER BY COUNT(*) ;'  ".exit ;"
 
 ```
+
+## Documentation
+
+I could not find any official documentation and, in fact, I could not even identify the manufacturer of the `PJ-1203A`.
+
+A table describing the datapoints was published in https://github.com/Koenkk/zigbee2mqtt/issues/18419 but its origin remains unclear. 
+
+
+| #  | DP  | NAME                          | Report/Set     | Bytes | Comment                                                                                          | 
+|----|-----|-------------------------------|----------------|-------|--------------------------------------------------------------------------------------------------|
+| 1  | 115 | `DPID_POWER_TOTAL_ID`         | only report    | 4     | 1. report the total power (A+B) <br> 2. big-endian, 0.1W, X10 <br> 3. signed (32bits)            |
+| 2  | 101 | `DPID_POWER_ID_A`             | only report    | 4     | 1. report the total power (A) <br> 2. big-endian, 0.1W, X10 <br> 3. unsigned int (32bits)        |
+| 3  | 105 | `DPID_POWER_ID_B`             | only report    | 4     | 1. report the total power (B) <br> 2. big-endian, 0.1W, X10 <br> 3. unsigned int (32bits)        |
+| 4  | 102 | `DPID_POWER_DIRECTION_ID_A`   | only report    | 1     | 0: Forward, 1:Reverse                                                                            |
+| 5  | 104 | `DPID_POWER_DIRECTION_ID_B`   | only report    | 1     | 0: Forward, 1:Reverse                                                                            |
+| 6  | 106 | `DPID_FORWARD_ENERGY_TOTAL_A` | only report    | 4     | 1. report the forward energy (A) <br> 2. big-endian, X100, 0.01KWH <br>3. unsigned int (32bits)  |
+| 7  | 107 | `DPID_REVERSE_ENERGY_TOTAL_A` | only report    | 4     | 1. report the reverse energy (A) <br> 2. big-endian, X100, 0.01KWH <br>3. unsigned int (32bits)  |
+| 8  | 108 | `DPID_FORWARD_ENERGY_TOTAL_B` | only report    | 4     | 1. report the forward energy (B) <br> 2. big-endian, X100, 0.01KWH <br> 3. unsigned int (32bits) |
+| 9  | 109 | `DPID_REVERSE_ENERGY_TOTAL_B` | only report    | 4     | 1. report the reverse energy (B) <br> 2. big-endian, X100, 0.01KWH <br>3. unsigned int (32bits)  |
+| 10 | 110 | `DPID_POWER_FACTOR_A`         | only report    | 4     | 1. report the power factor (A) <br> 2. big-endian, X100 <br> 3. unsigned int (32bits)            |
+| 11 | 121 | `DPID_POWER_FACTOR_B`         | only report    | 4     | 1. report the power factor (B) <br> 2. big-endian, X100 <br> 3. unsigned int (32bits)            |
+| 12 | 111 | `DPID_POWER_FREQ`             | only report    | 4     | 1. report the AC freq <br> 2. big-endian, X100 <br>3. unsigned int (32bits)                      |
+| 13 | 112 | `DPID_VOLTAGE_A`              | only report    | 4     | 1. report the Voltage <br> 2. big-endian, X100<br> 3. unsigned int (32bits)                      |
+| 14 | 113 | `DPID_CURRENT_A`              | only report    | 4     | 1. report the Current(A) <br> 2. big-endian, X100<br> 3. unsigned int (32bits)                   |
+| 15 | 114 | `DPID_CURRENT_B`              | only report    | 4     | 1. report the Current(B) <br> 2. big-endian, X100 <br>3. unsigned int (32bits)                   |
+| 16 | 129 | `DPID_UPDATE_RATE`            | report/setting | 4     | 1. report the update rate <br> 2. big-endian, (3-60s) <br>3. unsigned int (32bits)               |
+| 17 | 116 | `DPID_VOLTAGE_A_COEF`         | report/setting | 4     | 1. Calibration Voltage <br> 2. big-endian, X1000 <br>3. unsigned int (32bits)                    |
+| 18 | 117 | `DPID_CURRENT_A_COEF`         | report/setting | 4     | 1. Calibration Current_A <br> 2. big-endian, X1000 <br> 3. unsigned int (32bits)                 |
+| 19 | 118 | `DPID_POWER_A_COEF`           | report/setting | 4     | 1. Calibration Power A <br> 2. big-endian, X1000 <br>3. unsigned int (32bits)                    |
+| 20 | 119 | `DPID_ENERGY_A_COEF`          | report/setting | 4     | 1. Calibration Forward energy_A <br> 2. big-endian, X1000 <br> 3. unsigned int (32bits)          |
+| 21 | 127 | `DPID_ENERGY_A_COEF_REV`      | report/setting | 4     | 1. Calibration Reverse energy_A <br> 2. big-endian, X1000 <br> 3. unsigned int (32bits)          |
+| 22 | 122 | `DPID_FREQ_COEF`              | report/setting | 4     | 1. Calibration AC freq <br> 2. big-endian, X1000 <br> 3. unsigned int (32bits)                   |
+| 23 | 123 | `DPID_CURRENT_B_COEF`         | report/setting | 4     | 1. Calibration Current_B <br> 2. big-endian, X1000 <br> 3. unsigned int (32bits)                 |
+| 24 | 124 | `DPID_POWER_B_COEF`           | report/setting | 4     | 1. Calibration Power B <br> 2. big-endian, X1000 <br>3. unsigned int (32bits)                    |
+| 25 | 125 | `DPID_ENERGY_B_COEF`          | report/setting | 4     | 1. Calibration Forward energy_B <br> 2. big-endian, X1000 <br> 3. unsigned int (32bits)          |
+| 26 | 128 | `DPID_ENERGY_B_COEF_REV`      | report/setting | 4     | 1. Calibration Reverse energy_B <br> 2. big-endian, X1000 <br> 3. unsigned int (32bits)          |
+
+## Calibration datapoints
+
+The calibration datapoints (entries 17 to 26 in table) are all specified with a X1000 multiplier and an unsigned int value. 
+
+After a few experiments on `DPID_FREQ_COEF` (an easy one since it is pretty much constant), it appears that the calibration is 
+a multiplier scaled by 1/1000. For example, 730 causes a multiplication by 0.73 and 1000 (x1.0) does nothing. 
+
+This is not indicated in the table but values below 500 and above 2000 appear to be ignored so the usable calibration range is 0.5 to 2.0.
+
+Consequently, the following expose options are working quite well:
+
+```.withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value')```
+
+
+
+
+
+
+
 

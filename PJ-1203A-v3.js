@@ -5,16 +5,11 @@ const tuya = require('zigbee-herdsman-converters/lib/tuya');
 const utils = require('zigbee-herdsman-converters/lib/utils');
 const e = exposes.presets;
 const ea = exposes.access;
-//const {Buffer} = require('buffer');
-
-// 
-// WARNING !!!! only tested on _TZE204_81yrt3lo
-//
 
 // The PJ1203A is sending quick sequence of messages containing a single datapoint.
 // A sequence occurs every `update_frequency` seconds (10s by default) 
 //
-// A typical sequence is composed two identifcal groups for channel a and b. 
+// A typical sequence is composed of two identical groups for channel a and b. 
 //
 //     102 energy_flow_a
 //     112 voltage
@@ -33,9 +28,10 @@ const ea = exposes.access;
 //     115 power_ab
 //
 // It should be noted that when no current is detected on channel x then
-// energy_flow_x is not emited and current_x==0, power_x==0 and energy_flow_x==100.
-// Simply speaking, energy_flow_x is optional but the case can easily be detected
-// by checking if current_x or power_x is 0.
+// energy_flow_x is not emited and current_x==0, power_x==0 and power_factor_x==100.
+//
+// Simply speaking, energy_flow_x is optional but that specific case can easily
+// be detected by checking if current_x or power_x is 0.
 //
 // The other datapoints are emitted every few minutes.  
 // 
@@ -338,7 +334,18 @@ const PJ1203A_fz_datapoints = {
 
 const PJ1203A_tz_datapoints = {
     ...tuya.tz.datapoints,
-    key: [ 'update_frequency' ]
+    key: [ 'update_frequency',
+           'calibration_energy_a',
+           'calibration_energy_b',
+           'calibration_energy_produced_a',
+           'calibration_energy_produced_b',
+           'calibration_power_a',
+           'calibration_power_b',
+           'calibration_current_a',
+           'calibration_current_b',
+           'calibration_freq',
+           'calibration_voltage',
+           ]
 };
 
 const definition = {
@@ -374,7 +381,17 @@ const definition = {
         e.voltage(),
         e.numeric('timestamp_a', ea.STATE).withDescription('Update time of channel A'),
         e.numeric('timestamp_b', ea.STATE).withDescription('Update time of channel B'),
-        e.numeric('update_frequency',ea.STATE_SET).withUnit('s').withDescription('Update frequency').withValueMin(3).withValueMax(60),
+        e.numeric('update_frequency',ea.STATE_SET).withUnit('s').withDescription('Update frequency').withValueMin(3).withValueMax(60).withValueStep(0.5).withPreset('default',10,'Default value'),
+        e.numeric('calibration_freq', ea.STATE_SET).withDescription('Calibration frequency').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        e.numeric('calibration_voltage', ea.STATE_SET).withDescription('Calibration voltage').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        e.numeric('calibration_energy_a', ea.STATE_SET).withDescription('Calibration forward energy A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        e.numeric('calibration_energy_b', ea.STATE_SET).withDescription('Calibration forward energy B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        e.numeric('calibration_energy_produced_a', ea.STATE_SET).withDescription('Calibration forward energy A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        e.numeric('calibration_energy_produced_b', ea.STATE_SET).withDescription('Calibration forward energy B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        e.numeric('calibration_power_a', ea.STATE_SET).withDescription('Calibration power A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        e.numeric('calibration_power_b', ea.STATE_SET).withDescription('Calibration power B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        e.numeric('calibration_current_a', ea.STATE_SET).withDescription('Calibration current A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        e.numeric('calibration_current_b', ea.STATE_SET).withDescription('Calibration current B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
     ],
     meta: {
         tuyaDatapoints: [
@@ -393,6 +410,16 @@ const definition = {
             [108, 'energy_b', tuya.valueConverter.divideBy100],
             [107, 'energy_produced_a', tuya.valueConverter.divideBy100],
             [109, 'energy_produced_b', tuya.valueConverter.divideBy100],
+            [116, 'calibration_voltage', tuya.valueConverter.divideBy1000],
+            [117, 'calibration_current_a', tuya.valueConverter.divideBy1000],
+            [118, 'calibration_power_a', tuya.valueConverter.divideBy1000],
+            [119, 'calibration_energy_a', tuya.valueConverter.divideBy1000],
+            [127, 'calibration_energy_produced_a', tuya.valueConverter.divideBy1000],
+            [122, 'calibration_freq', tuya.valueConverter.divideBy1000],
+            [123, 'calibration_current_b', tuya.valueConverter.divideBy1000],
+            [124, 'calibration_power_b', tuya.valueConverter.divideBy1000],
+            [125, 'calibration_energy_b', tuya.valueConverter.divideBy1000],
+            [128, 'calibration_energy_produced_b', tuya.valueConverter.divideBy1000],
             [129, 'update_frequency', tuya.valueConverter.raw],
         ],
     },
