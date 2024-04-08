@@ -160,3 +160,63 @@ Currently tested on:
   - `_TZE204_81yrt3lo` with appVersion 74, stackVersion 0 and hwVersion 1
   
 
+### Huge Database in Home Assistant
+
+By default, Home Assistant records all entity changes in its database for a duration of 10 days.
+
+The following attributes of the PJ-1203A are updated every `update_frequency` seconds:
+  - `power_a`, `power_b` and `power_ab`
+  - `power_factor_a` and `power_factor_b`
+  - `current_a` and `current_b`
+  - `energy_flow_a` and `energy_flow_b`
+  - `timestamp_a` and `timestamp_b` (or `update_a` and `update_b` )
+
+So 10 days with an update frequency of let's say 5 seconds can produce up to `10*24*3600/5 = 172800` 
+entries for each entity.
+
+The remianing attributes `ac_frequency`, `ac_voltage`, `energy_a`, `energy_b`, `energy_produced_a` and
+`energy_produced_b` are modified far less frequently and are usually not a problem. 
+
+The first step to prevent the database from growing too much is probably to
+disable the entities you do not care about. That can be done by filtering them
+out in `zigbee2mqtt` or by disabling them in Home Assistant.
+
+The second step is to disable recording for some of the remaining entities in Home Assistant.
+This is documented in https://www.home-assistant.io/integrations/recorder/
+
+For example, I only need recording for the daily graphs of `power_a` and `power_b` so I use the following 
+lines in my Home Assistant `configuration.yaml` file (restart needed):
+
+```
+recorder:
+  exclude:
+    entity_globs:
+      - sensor.*_linkquality
+    entities:
+      - sensor.energy_meter_power_ab
+      - sensor.energy_meter_timestamp_a
+      - sensor.energy_meter_timestamp_b
+      - sensor.energy_meter_current_a
+      - sensor.energy_meter_current_b
+      - sensor.energy_meter_energy_flow_a
+      - sensor.energy_meter_energy_flow_b
+      - sensor.energy_meter_power_factor_a
+      - sensor.energy_meter_power_factor_b
+```
+
+Also, I am using the following shell script to count the number of entries in the HA database.
+They should stop growing once the recording is disabled.
+
+```sh
+#!/bin/sh
+
+# Count the number of recordered entries per entity in the Home Assistant 
+# database (sqlite3 only)
+
+DATABASE="/share/Docker/HomeAssistant/config/home-assistant_v2.db"
+
+sqlite3 "$DATABASE" 'SELECT COUNT(*), states_meta.entity_id  FROM states_meta, states where states_meta.metadata_id = states
+.metadata_id GROUP BY states_meta.entity_id ORDER BY COUNT(*) ;'  ".exit ;"
+
+```
+
