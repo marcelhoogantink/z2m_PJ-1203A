@@ -74,14 +74,15 @@ This is a simplified variant with the following features:
 ## PJ_1203A-v3.js
 
 Similar to PJ_1203A-v2 with the followwing changes:
-  - An option to control how the energy flow direction should be reported:  
+  - An option to control how the energy flow direction should be reported:
      `consuming` or `producing` in `energy_flow_x` or as the sign of `power_x` (in 
      which case `energy_flow_x` is set to `sign`)
   - Separate options for channels A and B (where applicable).
   - `update_a` and `update_b` are replaced by `timestamp_a` and `timestamp_b`
     whose values indicate when the corresponding power datapoint was received 
     in ISO_8601 format. That makes them valid timestamps in Home Assistant (see below).
-    
+  - The calibration datapoints (from x0.5 to x2.0) are now working.
+      
 ## Home Assistant autodiscovery & Timestamps 
 
 Home Assistant requires autodiscovery messages to configure the device entities. 
@@ -260,18 +261,54 @@ A table describing the datapoints was published in https://github.com/Koenkk/zig
 | 25 | 125 | `DPID_ENERGY_B_COEF`          | report/setting | 4     | 1. Calibration Forward energy_B <br> 2. big-endian, X1000 <br> 3. unsigned int (32bits)          |
 | 26 | 128 | `DPID_ENERGY_B_COEF_REV`      | report/setting | 4     | 1. Calibration Reverse energy_B <br> 2. big-endian, X1000 <br> 3. unsigned int (32bits)          |
 
+
+The datapoint `106`, `107`, `108` and `109` are produced every 6 minutes. 
+
+The datapoint `1` and `2` are also produced by the device and respectively contain  `DPID_FORWARD_ENERGY_TOTAL_A+DPID_FORWARD_ENERGY_TOTAL_B` (106+108) and 
+`DPID_REVERSE_ENERGY_TOTAL_A+DPID_REVERSE_ENERGY_TOTAL_B` (107+109). 
+  
+The table describes all calibration datapoints as 'report/setting' but those are never reported. An explicit query may be necessary. 
+QUESTION: IS THERE A STANDARD METHOD TO QUERY A TUYA DATAPOINT? 
+
+QUESTION: There are no datapoints for 103, 120 and 126. Some undocumented settings maybe? Maybe to control the update rate for dp 106-109?
+
+QUESTION: Why use VOLTAGE_A for the dp 112 and 116? Is there a `VOLTAGE_B`? 
+
 ## Calibration datapoints
+
+** THEY ARE CURRENTLY COMMENTED IN THE CODE BECAUSE THEIR BEHAVIOR IS PURELY COSMETIC ** 
 
 The calibration datapoints (entries 17 to 26 in table) are all specified with a X1000 multiplier and an unsigned int value. 
 
 After a few experiments on `DPID_FREQ_COEF` (an easy one since it is pretty much constant), it appears that the calibration is 
 a multiplier scaled by 1/1000. For example, 730 causes a multiplication by 0.73 and 1000 (x1.0) does nothing. 
 
-This is not indicated in the table but values below 500 and above 2000 appear to be ignored so the usable calibration range is 0.5 to 2.0.
+This is not indicated in the table but values below 500 and above 2000 are ignored so the usable calibration range is 0.5 to 2.0.
 
-Consequently, the following expose options are working quite well:
+Consequently, the following expose options are working quite well with a `.divideBy1000` filter on all datapoint converters: 
 
 ```.withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value')```
+
+The device reacts to a successfull change by emiting the datapoint and it remains silent otherwise. There is 
+currently no known method to obtain the current value of a calibration. 
+
+Also, those calibrations do not affect each others. For example, Voltage, Power and Current should be related
+by the formula Power=Voltage*Current but applying a calibration on one does not affect the other two.
+         
+Simply speaking, the calibration are purely cosmetic.
+
+TODO: Check if the accumulated energies (in kWh) are affected by the power calibrations (in W).
+      That would be the only sensible use for the calibration.
+
+WARNING: The energy calibration are applied to the TOTAL value accumulated so far. 
+For example, if `energy_a` is currently reporting 20000 kWh of accumulated
+and `calibration_energy_a` is set to 1.3 then the next report is going to
+be 26000 kWh. Home Assistant will interpret that as a +6000kWh of instantaneous
+energy consumption.
+
+Simply speaking, **CHANGING AN ENERGY CALIBRATION IS PROBABLY A BAD IDEA.**
+
+
 
 
 

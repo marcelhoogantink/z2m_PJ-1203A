@@ -31,7 +31,7 @@ const ea = exposes.access;
 // energy_flow_x is not emited and current_x==0, power_x==0 and power_factor_x==100.
 //
 // Simply speaking, energy_flow_x is optional but that specific case can easily
-// be detected by checking if current_x or power_x is 0.
+// be detected when current_x or power_x is 0.
 //
 // The other datapoints are emitted every few minutes.  
 // 
@@ -343,7 +343,7 @@ const PJ1203A_tz_datapoints = {
            'calibration_power_b',
            'calibration_current_a',
            'calibration_current_b',
-           'calibration_freq',
+           'calibration_ac_frequency',
            'calibration_voltage',
            ]
 };
@@ -381,17 +381,35 @@ const definition = {
         e.voltage(),
         e.numeric('timestamp_a', ea.STATE).withDescription('Update time of channel A'),
         e.numeric('timestamp_b', ea.STATE).withDescription('Update time of channel B'),
-        e.numeric('update_frequency',ea.STATE_SET).withUnit('s').withDescription('Update frequency').withValueMin(3).withValueMax(60).withValueStep(0.5).withPreset('default',10,'Default value'),
-        e.numeric('calibration_freq', ea.STATE_SET).withDescription('Calibration frequency').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
-        e.numeric('calibration_voltage', ea.STATE_SET).withDescription('Calibration voltage').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
-        e.numeric('calibration_energy_a', ea.STATE_SET).withDescription('Calibration forward energy A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
-        e.numeric('calibration_energy_b', ea.STATE_SET).withDescription('Calibration forward energy B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
-        e.numeric('calibration_energy_produced_a', ea.STATE_SET).withDescription('Calibration forward energy A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
-        e.numeric('calibration_energy_produced_b', ea.STATE_SET).withDescription('Calibration forward energy B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
-        e.numeric('calibration_power_a', ea.STATE_SET).withDescription('Calibration power A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
-        e.numeric('calibration_power_b', ea.STATE_SET).withDescription('Calibration power B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
-        e.numeric('calibration_current_a', ea.STATE_SET).withDescription('Calibration current A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
-        e.numeric('calibration_current_b', ea.STATE_SET).withDescription('Calibration current B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        e.numeric('update_frequency',ea.STATE_SET).withUnit('s').withDescription('Update frequency').withValueMin(3).withValueMax(60).withPreset('default',10,'Default value'),
+        //
+        // The calibrations are applying a scaling factor between 0.5 and 2.0 to the published value.
+        // They do not affect each others. For example, voltage, power and current should be related
+        // by the formula power=voltage*current but applying a calibration on one does not affect the
+        // other two.
+        // 
+        // Simply speaking, the calibration are purely cosmetic. This is why they commented by default.       
+        // 
+        // TODO: Check if the accumulated energy (in kWh) is affected by the power calibration (in W).
+        //       That would be the only sensible use for the calibration.
+        //
+        // NOTE: The energy calibration are applied to the TOTAL value accumulated so far.
+        //       For example, if energy_a is currently reporting 20000 kWh of accumulated
+        //       and calibration_energy_a is set to 1.3 then the next report is going to
+        //       be 26000 kWh. Home Assistant will interpret that as a +6000kWh of instantaneous
+        //       energy consumption.
+        //       Simply speaking, CHANGING AN ENERGY CALIBRATION IS PROBABLY A BAD IDEA.  
+        //       
+        //e.numeric('calibration_ac_frequency', ea.STATE_SET).withDescription('Calibration AC frequency').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        //e.numeric('calibration_voltage', ea.STATE_SET).withDescription('Calibration voltage').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        //e.numeric('calibration_energy_a', ea.STATE_SET).withDescription('Calibration energy A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        //e.numeric('calibration_energy_b', ea.STATE_SET).withDescription('Calibration energy B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        //e.numeric('calibration_energy_produced_a', ea.STATE_SET).withDescription('Calibration produced energy A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        //e.numeric('calibration_energy_produced_b', ea.STATE_SET).withDescription('Calibration produced energy B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        //e.numeric('calibration_power_a', ea.STATE_SET).withDescription('Calibration power A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        //e.numeric('calibration_power_b', ea.STATE_SET).withDescription('Calibration power B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        //e.numeric('calibration_current_a', ea.STATE_SET).withDescription('Calibration current A').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
+        //e.numeric('calibration_current_b', ea.STATE_SET).withDescription('Calibration current B').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
     ],
     meta: {
         tuyaDatapoints: [
@@ -410,16 +428,16 @@ const definition = {
             [108, 'energy_b', tuya.valueConverter.divideBy100],
             [107, 'energy_produced_a', tuya.valueConverter.divideBy100],
             [109, 'energy_produced_b', tuya.valueConverter.divideBy100],
-            [116, 'calibration_voltage', tuya.valueConverter.divideBy1000],
-            [117, 'calibration_current_a', tuya.valueConverter.divideBy1000],
-            [118, 'calibration_power_a', tuya.valueConverter.divideBy1000],
-            [119, 'calibration_energy_a', tuya.valueConverter.divideBy1000],
-            [127, 'calibration_energy_produced_a', tuya.valueConverter.divideBy1000],
-            [122, 'calibration_freq', tuya.valueConverter.divideBy1000],
-            [123, 'calibration_current_b', tuya.valueConverter.divideBy1000],
-            [124, 'calibration_power_b', tuya.valueConverter.divideBy1000],
-            [125, 'calibration_energy_b', tuya.valueConverter.divideBy1000],
-            [128, 'calibration_energy_produced_b', tuya.valueConverter.divideBy1000],
+            //[116, 'calibration_voltage', tuya.valueConverter.divideBy1000],
+            //[117, 'calibration_current_a', tuya.valueConverter.divideBy1000],
+            //[118, 'calibration_power_a', tuya.valueConverter.divideBy1000],
+            //[119, 'calibration_energy_a', tuya.valueConverter.divideBy1000],
+            //[127, 'calibration_energy_produced_a', tuya.valueConverter.divideBy1000],
+            //[122, 'calibration_ac_frequency', tuya.valueConverter.divideBy1000],
+            //[123, 'calibration_current_b', tuya.valueConverter.divideBy1000],
+            //[124, 'calibration_power_b', tuya.valueConverter.divideBy1000],
+            //[125, 'calibration_energy_b', tuya.valueConverter.divideBy1000],
+            //[128, 'calibration_energy_produced_b', tuya.valueConverter.divideBy1000],
             [129, 'update_frequency', tuya.valueConverter.raw],
         ],
     },
