@@ -81,7 +81,8 @@ Similar to PJ_1203A-v2 with the followwing changes:
   - `update_a` and `update_b` are replaced by `timestamp_a` and `timestamp_b`
     whose values indicate when the corresponding power datapoint was received 
     in ISO_8601 format. That makes them valid timestamps in Home Assistant (see below).
-  - The calibration datapoints (from x0.5 to x2.0) are now working.
+  - The calibration datapoints (from x0.5 to x2.0) are now working but are 
+    commented in the code because they are purely cosmetic (see below). 
       
 ## Home Assistant autodiscovery & Timestamps 
 
@@ -295,12 +296,12 @@ currently no known method to obtain the current value of a calibration.
 Also, those calibrations do not affect each others. For example, Voltage, Power and Current should be related
 by the formula Power=Voltage*Current but applying a calibration on one does not affect the other two.
          
-Simply speaking, the calibration are purely cosmetic.
+Simply speaking, the calibrations are purely cosmetic.
 
-TODO: Check if the accumulated energies (in kWh) are affected by the power calibrations (in W).
-      That would be the only sensible use for the calibration.
+**TODO**: Check if the accumulated energies (in kWh) are affected by the power
+calibrations (in W). That would be the only sensible use for the calibration.
 
-WARNING: The energy calibration are applied to the TOTAL value accumulated so far. 
+**WARNING**: The energy calibration are applied to the TOTAL value accumulated so far. 
 For example, if `energy_a` is currently reporting 20000 kWh of accumulated
 and `calibration_energy_a` is set to 1.3 then the next report is going to
 be 26000 kWh. Home Assistant will interpret that as a +6000kWh of instantaneous
