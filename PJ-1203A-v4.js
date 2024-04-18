@@ -306,7 +306,7 @@ const PJ1203A_ignore_tuya_set_time = {
     convert: (model, msg, publish, options, meta) =>
     {
         // There is no 'seq' field in the msg payload of 'commandMcuSyncTime'
-        // but the device is increasing its counter. 
+        // but the device appears to be increasing its internal counter. 
         let priv = PJ1203A_getPrivateState(meta) ;
         priv.last_seq += priv.seq_inc ;
     }
@@ -331,7 +331,7 @@ const PJ1203A_fz_datapoints = {
         let priv = PJ1203A_getPrivateState(meta) ;
 
         // Detect missing or re-ordered messages but allow duplicate messages (should we?).
-        let expected_seq = (priv.last_seq+seq_inc) & 0xFFFF ;
+        let expected_seq = (priv.last_seq+priv.seq_inc) & 0xFFFF ;
         if ( ( msg.data.seq != expected_seq ) && ( msg.data.seq != priv.last_seq ) )  {             
             meta.logger.debug(`[PJ1203A] Missing or re-ordered message detected: Got seq=${msg.data.seq}, expected ${priv.next_seq}`);
             // Clear all pending attributes 
