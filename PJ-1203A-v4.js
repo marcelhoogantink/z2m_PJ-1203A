@@ -3,8 +3,10 @@ const tz = require('zigbee-herdsman-converters/converters/toZigbee');
 const exposes = require('zigbee-herdsman-converters/lib/exposes');
 const tuya = require('zigbee-herdsman-converters/lib/tuya');
 const utils = require('zigbee-herdsman-converters/lib/utils');
+const globalStore = require('zigbee-herdsman-converters/lib/store');
 const e = exposes.presets;
 const ea = exposes.access;
+
 
 // The PJ1203A is sending quick sequence of messages containing a single datapoint.
 // A sequence occurs every `update_frequency` seconds (10s by default) 
@@ -30,17 +32,43 @@ const ea = exposes.access;
 // It should be noted that when no current is detected on channel x then
 // energy_flow_x is not emited and current_x==0, power_x==0 and power_factor_x==100.
 //
-// Simply speaking, energy_flow_x is optional but that specific case can easily
-// be detected when current_x or power_x is 0.
-//
 // The other datapoints are emitted every few minutes.  
+//
+// There is a known issue on the _TZE204_81yrt3lo with appVersion 74, stackVersion 0 and hwVersion 1. 
+// The energy_flow datapoints are (incorrectly) emited during the next update. Simply speaking, they 
+// energy flow direction arrives `update_frequency` too late. This is highly problematic because that
+// means that incoherent data can be published.
 // 
+//   For example, suppose that solar panels are producing an excess of 100W on channel X and that
+//   a device that consumes 500W is turned on. The following states will be published in MQTT
+//
+//   ...
+//   { "energy_flow_x":"producing" , "power_x":100 , ... }
+//   ...  
+//   { "energy_flow_x":"producing" , "power_x":400 , ... }
+//   ... 
+//   { "energy_flow_x":"consuming" , "power_x":400 , ... } 
+//   ...
+//
+//   Channel X is seen as producing 400W during update_frequency seconds which makes no sense.
+//
+//   This is addressed by the late_energy_flow_x option that delays the publication of all
+//   channel X attributes until the next energy_flow_x datapoint. The default is to publish  
+//   when the last datapoint is received on channel X (that would typically be power_factor_x)
+//  
+//   Remark: When energy_flow_x is not emited (i.e. no current. see above), the publication
+//   will occur immediately regardless of the late_energy_flow_x option. 
+//
+// For each channel X, the option signed_power_x allows to publish signed power values to indicate
+// the energy flow direction (positive when "consuming" and negative when "producing"). The attribute
+// energy_flow_x is then set to "sign".
+//
 
-
-// Store our internal state in meta.device._priv
+ 
 function PJ1203A_getPrivateState(meta) {
-    if ( ! ('_priv' in meta.device) ) {
-        meta.device._priv = {
+    let priv = globalStore.getValue(meta.device, 'private_state') ;
+    if (priv===undefined) {
+        priv = {           
             'sign_a': null, 
             'sign_b': null, 
             'power_a': null, 
@@ -49,25 +77,26 @@ function PJ1203A_getPrivateState(meta) {
             'current_b': null,
             'power_factor_a': null,
             'power_factor_b': null,
-            'last_seq': -99999,
-            'timestamp_a': null,
+             'timestamp_a': null,
             'timestamp_b': null,
-            // Also save the last published signed values of power_a and power_b
-            // to recompute power_ab on the fly.
+            // Used to detect missing or misordered messages.
+            // The _TZE204_81yrt3lo uses an increment of 256.
+            'last_seq': -99999,
+            'seq_inc' : 256,
+            // Also need to save the last published SIGNED values of
+            // power_a and power_b to recompute power_ab on the fly.
             'pub_power_a': null,
-            'pub_power_b': null,            
-        } ;
-    }      
-    return meta.device._priv ;
+            'pub_power_b': null,    
+        } 
+        globalStore.putValue(meta.device, 'private_state', priv )  ;
+    }
+    return priv;
 }
 
-// The _TZE204_81yrt3lo increments its payload 'seq' value by steps of 256
-// This is hopefully the same for all variants. 
-const PJ1203A_SEQ_INCREMENT = 256 ; 
 
 const PJ1203A_options = {
     
-    energy_flow_qwirk: (x) => exposes.binary('energy_flow_qwirk_'+x.toUpperCase(), ea.SET, true, false )
+    late_energy_flow: (x) => exposes.binary('late_energy_flow_'+x.toUpperCase(), ea.SET, true, false )
         .withDescription(
             ' If true then delay channel '+x.toUpperCase()+' publication until the next energy flow update.'+
                 ' The default is false.'
@@ -80,8 +109,8 @@ const PJ1203A_options = {
         ),
 };
 
-function PJ1203A_get_energy_flow_qwirk(options,x) {
-    let key ='energy_flow_qwirk_'+x.toUpperCase()  
+function PJ1203A_get_late_energy_flow(options,x) {
+    let key ='late_energy_flow_'+x.toUpperCase()  
     if (key in options) 
         return options[key]
     else
@@ -179,8 +208,8 @@ const PJ1203A_valueConverters = {
                 let priv = PJ1203A_getPrivateState(meta) ;               
                 let result = {} ;
                 priv['sign_'+x] = (v==1) ? -1 : +1  ;
-                let energy_flow_qwirk = PJ1203A_get_energy_flow_qwirk(options,x)
-                if (energy_flow_qwirk) {
+                let late_energy_flow = PJ1203A_get_late_energy_flow(options,x)
+                if (late_energy_flow) {
                     PJ1203A_flush_all(result, x, priv, options);
                     if ( 'updated_'+x in  result ) {
                     }
@@ -200,7 +229,7 @@ const PJ1203A_valueConverters = {
                 
                 priv['power_'+x] = power_x;  
                 priv['timestamp_'+x] = new Date().toISOString()
-                
+
                 if (v==0) {
                     PJ1203A_flush_zero(result, x, priv, options);
                     return result;
@@ -239,8 +268,8 @@ const PJ1203A_valueConverters = {
                 let result = {} ;
                 priv['power_factor_'+x] = v ;  
 
-                let energy_flow_qwirk = PJ1203A_get_energy_flow_qwirk(options,x)
-                if (!energy_flow_qwirk) {
+                let late_energy_flow = PJ1203A_get_late_energy_flow(options,x)
+                if (!late_energy_flow) {
                     PJ1203A_flush_all(result, x, priv, options); 
                 }            
                 return result;
@@ -279,7 +308,7 @@ const PJ1203A_ignore_tuya_set_time = {
         // There is no 'seq' field in the msg payload of 'commandMcuSyncTime'
         // but the device is increasing its counter. 
         let priv = PJ1203A_getPrivateState(meta) ;
-        priv.last_seq += PJ1203A_SEQ_INCREMENT ;
+        priv.last_seq += priv.seq_inc ;
     }
 };
 
@@ -301,8 +330,8 @@ const PJ1203A_fz_datapoints = {
         
         let priv = PJ1203A_getPrivateState(meta) ;
 
-        // Detect missing or re-ordered messages but allow duplicate messages.
-        let expected_seq = (priv.last_seq+PJ1203A_SEQ_INCREMENT) & 0xFFFF ;
+        // Detect missing or re-ordered messages but allow duplicate messages (should we?).
+        let expected_seq = (priv.last_seq+seq_inc) & 0xFFFF ;
         if ( ( msg.data.seq != expected_seq ) && ( msg.data.seq != priv.last_seq ) )  {             
             meta.logger.debug(`[PJ1203A] Missing or re-ordered message detected: Got seq=${msg.data.seq}, expected ${priv.next_seq}`);
             // Clear all pending attributes 
@@ -317,14 +346,11 @@ const PJ1203A_fz_datapoints = {
         }
         
         priv.last_seq =  msg.data.seq;
-        
-        // Uncomment to display device data in the state (for debug)   
-        // result['device'] = meta.device ;
 
         // And finally, process the dp with tuya.fz.datapoints 
         Object.assign( result, tuya.fz.datapoints.convert(model, msg, publish, options, meta) ) ;
 
-        // WARNING: MUST BE REMOVED IN FINAL RELEASE
+        // REMINDER: MUST BE REMOVED IN FINAL RELEASE
         // meta.logger.debug(`[PJ1203A] priv   = ${JSON.stringify(priv)}`);
         // meta.logger.debug(`[PJ1203A] result = ${JSON.stringify(result)}`);
 
@@ -358,15 +384,16 @@ const definition = {
     onEvent: tuya.onEventSetTime,
     configure: tuya.configureMagicPacket,
     options: [
-        PJ1203A_options.energy_flow_qwirk('a'),
-        PJ1203A_options.energy_flow_qwirk('b'),
+        PJ1203A_options.late_energy_flow('a'),
+        PJ1203A_options.late_energy_flow('b'),
         PJ1203A_options.signed_power('a'),
         PJ1203A_options.signed_power('b'),
     ],
     exposes: [
-        tuya.exposes.powerWithPhase('a').withCategory('diagnostic'),
+        // Note: A and B are are not really phases (as in 3-phases). They are independant channels. 
+        tuya.exposes.powerWithPhase('a'),
         tuya.exposes.powerWithPhase('b'),
-        tuya.exposes.powerWithPhase('ab').withCategory('diagnostic'),
+        tuya.exposes.powerWithPhase('ab'),
         tuya.exposes.currentWithPhase('a'),
         tuya.exposes.currentWithPhase('b'),
         tuya.exposes.powerFactorWithPhase('a'),
@@ -379,6 +406,10 @@ const definition = {
         tuya.exposes.energyProducedWithPhase('b'),
         e.ac_frequency(),
         e.voltage(),
+        // Timestamp a and b are basically equivalent to last_seen
+        // but they indicate when the unsigned value of power_a and power_b
+        // were received. They can be several seconds in the past when
+        // the publication is delayed because of the late_energy_flow options.
         e.numeric('timestamp_a', ea.STATE).withDescription('Timestamp of power A measure'),
         e.numeric('timestamp_b', ea.STATE).withDescription('Timestamp of power B measure'),
         e.numeric('update_frequency',ea.STATE_SET).withUnit('s').withDescription('Update frequency').withValueMin(3).withValueMax(60).withPreset('default',10,'Default value'),
@@ -399,7 +430,8 @@ const definition = {
         //   and calibration_energy_a is set to 1.3 then the next report is going to
         //   be 26000 kWh. Home Assistant will interpret that as a +6000kWh of instantaneous
         //   energy consumption.
-        //   Simply speaking, CHANGING AN ENERGY CALIBRATION IS PROBABLY A BAD IDEA.  
+        //   Simply speaking, CHANGING AN ENERGY CALIBRATION IS PROBABLY A BAD IDEA BECAUSE
+        //   THIS IS GOING TO CREATE A HUGE SPIKE OR DROP IN YOUR APPARENT ENERGY CONSUMPTION
         //       
         //e.numeric('calibration_ac_frequency', ea.STATE_SET).withDescription('Calibration AC frequency').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),
         //e.numeric('calibration_voltage', ea.STATE_SET).withDescription('Calibration voltage').withValueMin(0.5).withValueMax(2.0).withValueStep(0.01).withPreset('default',1.0,'Default value'),

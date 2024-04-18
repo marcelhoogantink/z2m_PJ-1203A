@@ -73,7 +73,7 @@ This is a simplified variant with the following features:
 
 ## PJ_1203A-v3.js
 
-Similar to PJ_1203A-v2 with the followwing changes:
+Similar to PJ_1203A-v2 with the following changes:
   - An option to control how the energy flow direction should be reported:
      `consuming` or `producing` in `energy_flow_x` or as the sign of `power_x` (in 
      which case `energy_flow_x` is set to `sign`)
@@ -83,6 +83,13 @@ Similar to PJ_1203A-v2 with the followwing changes:
     in ISO_8601 format. That makes them valid timestamps in Home Assistant (see below).
   - The calibration datapoints (from x0.5 to x2.0) are now working but are 
     commented in the code because they are purely cosmetic (see below). 
+      
+## PJ_1203A-v4.js
+
+Similar to PJ_1203A-v3 with the following changes:
+  - Renamed options `energy_flow_qwirk_x` to `late_energy_flow_x`.
+  - Use globalStore for the private state
+  - Misc cleanups be proposing integration in Z2M
       
 ## Home Assistant autodiscovery & Timestamps 
 
