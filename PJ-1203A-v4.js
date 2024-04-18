@@ -211,8 +211,6 @@ const PJ1203A_valueConverters = {
                 let late_energy_flow = PJ1203A_get_late_energy_flow(options,x)
                 if (late_energy_flow) {
                     PJ1203A_flush_all(result, x, priv, options);
-                    if ( 'updated_'+x in  result ) {
-                    }
                 }    
                 return result;
             } 
