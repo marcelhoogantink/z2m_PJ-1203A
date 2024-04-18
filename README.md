@@ -3,6 +3,9 @@ A small repository for my custom zigbee2mqtt converter for the PJ-1203A
 
 I started a discussion in https://github.com/Koenkk/zigbee2mqtt/discussions/21956
 
+and an issue in Z2M https://github.com/Koenkk/zigbee2mqtt/issues/22248
+
+
 ## Installation
 
 Assuming that zigbee2mqtt is installed in `/opt/zigbee2mqtt`, copy one of the proposed variant 
@@ -96,7 +99,7 @@ Similar to PJ_1203A-v3 with the following changes:
 Home Assistant requires autodiscovery messages to configure the device entities. 
 Z2M is supposed to take care of that automatically but unfortunately some important information are derived from the attribute name which is problematic for converters using 'non-standard' names. For example, the `device_class` is automatically set to `current` for attributes with name `current`, `current_phase_b` and `current_phase_c` but not for `current_a` and `current_b`. 
 
-For non-stanard attributes, the configuration cannot be done from the converter code. I recently filled a feature request to improve the situation  https://github.com/Koenkk/zigbee2mqtt/issues/22098 but for now, the configuration must be done manually either in zigbee2mqtt or in Homme Assistant.
+For non-standard attributes, the configuration cannot be done from the converter code. I recently filled a feature request to improve the situation  https://github.com/Koenkk/zigbee2mqtt/issues/22098 but for now, the configuration must be done manually either in zigbee2mqtt or in Homme Assistant.
 
 My `zigbee2mqtt/data/configuration.yaml` contains the following entries for the PJ1203A device:
 

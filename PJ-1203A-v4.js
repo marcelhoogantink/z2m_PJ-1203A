@@ -215,7 +215,7 @@ const PJ1203A_valueConverters = {
                 return result;
             } 
         };
-    }, // end of energy_flow:
+    }, 
 
     power: (x) => {
         return {
@@ -236,7 +236,7 @@ const PJ1203A_valueConverters = {
                 return result;
             }
         };
-    },  // end of power:
+    },  
 
     current: (x) => {
         return {
@@ -256,7 +256,7 @@ const PJ1203A_valueConverters = {
                 return result;
             }
         };
-    },  // end of current: 
+    },  
     
     power_factor: (x) => {
         return {
@@ -273,19 +273,19 @@ const PJ1203A_valueConverters = {
                 return result;
             }
         };
-    },  // end of power_factor: 
+    },  
 
 
-    // We currently discard the power_ab datapoint.
-    // It is always recomputed on the fly to match
-    // the published values or power_a and power_b 
+    // We currently discard the power_ab datapoint
+    // but it is recomputed on the fly to match
+    // the published values of power_a and power_b.
     power_ab: () => {
         return {
             from: (v, meta, options) => {
                 return {} ;
             }
         };
-    },  // end of power_ab: 
+    },  
     
 };
 
@@ -295,7 +295,7 @@ const PJ1203A_valueConverters = {
 // that also increases our private 'next_seq' field.
 //
 // This is needed to prevent 'commandMcuSyncTime' from
-// messing up with our detection of missing datapoints (see 
+// messing up with the detection of missing datapoints (see 
 // below in PJ1203A_fz_datapoints).
 //
 const PJ1203A_ignore_tuya_set_time = {
@@ -332,7 +332,7 @@ const PJ1203A_fz_datapoints = {
         let expected_seq = (priv.last_seq+priv.seq_inc) & 0xFFFF ;
         if ( ( msg.data.seq != expected_seq ) && ( msg.data.seq != priv.last_seq ) )  {             
             meta.logger.debug(`[PJ1203A] Missing or re-ordered message detected: Got seq=${msg.data.seq}, expected ${priv.next_seq}`);
-            // Clear all pending attributes 
+            // Clear all pending attributes since we cannot insure that they match  
             priv.sign_a = null;
             priv.sign_b = null;
             priv.power_a = null;
