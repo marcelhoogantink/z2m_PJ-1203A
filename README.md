@@ -93,6 +93,12 @@ Similar to PJ_1203A-v3 with the following changes:
   - Renamed options `energy_flow_qwirk_x` to `late_energy_flow_x`.
   - Use globalStore for the private state
   - Misc cleanups before asking Z2M to integrate
+
+## PJ_1203A-v5.mjs
+
+Similar to PJ_1203A-v4 with the following changes:
+  - Updated so it works inder the current Z2M version (
+  - Added optional singel-zero removal for current and power
       
 ## Home Assistant autodiscovery & Timestamps 
 
